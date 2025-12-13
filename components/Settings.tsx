@@ -8,29 +8,32 @@ import {
   Globe, 
   Shield, 
   Clock, 
-  Database,
-  Smartphone,
-  Fingerprint,
-  Plus,
-  Trash2,
-  BookOpen,
-  Layers,
-  Layout,
-  LayoutTemplate,
-  ToggleLeft,
-  ToggleRight,
-  Monitor,
-  PanelLeft,
-  Menu,
-  Edit2,
-  Upload,
-  ChevronDown,
-  Check,
-  X
+  Database, 
+  Smartphone, 
+  Fingerprint, 
+  Plus, 
+  Trash2, 
+  BookOpen, 
+  Layers, 
+  Layout, 
+  LayoutTemplate, 
+  ToggleLeft, 
+  ToggleRight, 
+  Monitor, 
+  PanelLeft, 
+  Menu, 
+  Edit2, 
+  Upload, 
+  ChevronDown, 
+  Check, 
+  X, 
+  UserCog, 
+  PenTool, 
+  Users 
 } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { useToast } from '../context/ToastContext';
-import { NavItem, DashboardLayoutConfig, AdminPanelConfig, SystemPermissions } from '../types';
+import { NavItem, DashboardLayoutConfig, AdminPanelConfig, SystemPermissions, UserFieldConfig } from '../types';
 import { iconList, getIcon } from '../utils/iconMap';
 import { UserManagement } from './UserManagement';
 
@@ -66,6 +69,12 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const [adminConfig, setAdminConfig] = useState<AdminPanelConfig | null>(null);
   const [menuLayout, setMenuLayout] = useState<NavItem[]>([]);
   const [rolePermissions, setRolePermissions] = useState<SystemPermissions | null>(null);
+  
+  // User Config State
+  const [userConfig, setUserConfig] = useState<{ userTypes: string[]; userFields: UserFieldConfig[] }>({ userTypes: [], userFields: [] });
+  const [newUserType, setNewUserType] = useState('');
+  const [newField, setNewField] = useState<Partial<UserFieldConfig>>({ label: '', type: 'text', required: false });
+  const [activeUserConfigTab, setActiveUserConfigTab] = useState<'types' | 'form'>('types');
 
   const [activeLayoutTab, setActiveLayoutTab] = useState<'dashboard' | 'admin' | 'menu'>('dashboard');
   const [activeRoleTab, setActiveRoleTab] = useState<string>('Admin');
@@ -91,10 +100,14 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   useEffect(() => {
     if (activePage === 'system-student-field') {
       fetchStudentFields();
-    } else if (activePage === 'dashboard-layout') {
+    } else if (activePage === 'dashboard-layout' || activePage === 'menu-layout') {
+      if (activePage === 'menu-layout') setActiveLayoutTab('menu');
       fetchLayouts();
     } else if (activePage === 'role-permissions') {
       fetchPermissions();
+      fetchUserConfig(); // Fetch dynamic roles for permissions tab
+    } else if (activePage === 'user-configuration') {
+      fetchUserConfig();
     } else if (activePage === 'settings-users') {
       // No specific load needed here, UserManagement handles it
     } else {
@@ -136,6 +149,13 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setIsLoading(true);
     const data = await dbService.getRolePermissions();
     setRolePermissions(data);
+    setIsLoading(false);
+  };
+
+  const fetchUserConfig = async () => {
+    setIsLoading(true);
+    const data = await dbService.getUserConfiguration();
+    setUserConfig(data);
     setIsLoading(false);
   };
 
@@ -244,6 +264,33 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     else showToast("Failed to save permissions: " + result.error, 'error');
   };
 
+  const handleSaveUserConfig = async () => {
+    setIsSaving(true);
+    // 1. Save Config
+    const result = await dbService.saveUserConfiguration(userConfig);
+    
+    if (result.success) {
+        showToast("User configuration saved!");
+        // 2. Attempt to Sync Schema (Auto Add Column)
+        try {
+            const schemaResult = await dbService.ensureCustomFieldsSchema();
+            if (!schemaResult.success) {
+                // Warning only - doesn't stop flow
+                if (schemaResult.error.includes("function") && schemaResult.error.includes("does not exist")) {
+                    showToast("Note: Auto-schema update failed. SQL setup required.", 'info');
+                }
+            } else {
+                showToast("Database schema synchronized.");
+            }
+        } catch (e) {
+            console.warn("Schema sync error", e);
+        }
+    } else {
+        showToast("Failed to save: " + result.error, 'error');
+    }
+    setIsSaving(false);
+  };
+
   const handleAddField = (type: 'classes' | 'sections' | 'subjects') => {
     let value = '';
     if (type === 'classes') value = newClass;
@@ -261,6 +308,37 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
 
   const handleRemoveField = (type: 'classes' | 'sections' | 'subjects', index: number) => {
     setStudentFields(prev => ({ ...prev, [type]: prev[type].filter((_, i) => i !== index) }));
+  };
+
+  // User Config Helpers
+  const addUserType = () => {
+    if (!newUserType.trim()) return;
+    setUserConfig(prev => ({ ...prev, userTypes: [...prev.userTypes, newUserType.trim()] }));
+    setNewUserType('');
+  };
+
+  const removeUserType = (index: number) => {
+    setUserConfig(prev => ({ ...prev, userTypes: prev.userTypes.filter((_, i) => i !== index) }));
+  };
+
+  const addUserField = () => {
+    if (!newField.label) {
+      showToast("Label is required", "error");
+      return;
+    }
+    const field: UserFieldConfig = {
+      id: Date.now().toString(),
+      label: newField.label,
+      type: newField.type || 'text',
+      required: newField.required || false,
+      options: newField.options
+    };
+    setUserConfig(prev => ({ ...prev, userFields: [...prev.userFields, field] }));
+    setNewField({ label: '', type: 'text', required: false, options: '' });
+  };
+
+  const removeUserField = (id: string) => {
+    setUserConfig(prev => ({ ...prev, userFields: prev.userFields.filter(f => f.id !== id) }));
   };
 
   // Menu Layout Handlers
@@ -351,7 +429,154 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'settings-users':
         return <UserManagement />;
 
+      case 'user-configuration':
+        return (
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
+            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><UserCog className="w-5 h-5" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">User Configuration</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Manage user types and custom form fields.</p>
+                </div>
+              </div>
+              <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+                <button 
+                  onClick={() => setActiveUserConfigTab('types')} 
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'types' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                  <Users className="w-4 h-4" /> User Types
+                </button>
+                <button 
+                  onClick={() => setActiveUserConfigTab('form')} 
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'form' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                  <PenTool className="w-4 h-4" /> Input Form
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              {/* User Types Section */}
+              {activeUserConfigTab === 'types' && (
+                <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Users className="w-5 h-5 text-indigo-500" />
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage User Types</h4>
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      value={newUserType}
+                      onChange={(e) => setNewUserType(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addUserType()}
+                      placeholder="Add new user type (e.g., Driver, Staff)..."
+                      className="input-field flex-1"
+                    />
+                    <button onClick={addUserType} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {userConfig.userTypes.map((type, index) => (
+                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{type}</span>
+                        {/* Prevent deleting core system roles */}
+                        {!['Super Admin', 'Admin', 'Editor', 'Viewer'].includes(type) && (
+                          <button onClick={() => removeUserType(index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
+                        )}
+                      </div>
+                    ))}
+                    {userConfig.userTypes.length === 0 && <span className="text-sm text-gray-500 italic">No custom user types added.</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* User Input Form Configuration */}
+              {activeUserConfigTab === 'form' && (
+                <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <PenTool className="w-5 h-5 text-indigo-500" />
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Configure User Input Form</h4>
+                  </div>
+                  
+                  {/* Add Field Form */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                    <div className="md:col-span-1">
+                      <label className="text-xs font-medium text-gray-500 mb-1 block">Label</label>
+                      <input 
+                        value={newField.label} 
+                        onChange={e => setNewField({...newField, label: e.target.value})} 
+                        placeholder="Field Label" 
+                        className="input-field w-full"
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="text-xs font-medium text-gray-500 mb-1 block">Type</label>
+                      <select 
+                        value={newField.type} 
+                        onChange={e => setNewField({...newField, type: e.target.value as any})}
+                        className="input-field w-full"
+                      >
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="email">Email</option>
+                        <option value="date">Date</option>
+                        <option value="select">Select Dropdown</option>
+                        <option value="textarea">Text Area</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-1">
+                       <label className="text-xs font-medium text-gray-500 mb-1 block">Options (for Select)</label>
+                       <input 
+                        value={newField.options || ''} 
+                        onChange={e => setNewField({...newField, options: e.target.value})} 
+                        placeholder="Comma separated" 
+                        disabled={newField.type !== 'select'}
+                        className="input-field w-full disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={newField.required} 
+                          onChange={e => setNewField({...newField, required: e.target.checked})}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Required</span>
+                      </label>
+                      <button onClick={addUserField} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium">Add Field</button>
+                    </div>
+                  </div>
+
+                  {/* Field List */}
+                  <div className="space-y-2">
+                    {userConfig.userFields.map((field) => (
+                      <div key={field.id} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg">
+                        <div className="flex items-center gap-4">
+                          <span className="font-medium text-gray-800 dark:text-white">{field.label}</span>
+                          <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase">{field.type}</span>
+                          {field.required && <span className="text-xs text-red-500 font-medium">* Required</span>}
+                          {field.options && <span className="text-xs text-gray-500 truncate max-w-[200px]">Options: {field.options}</span>}
+                        </div>
+                        <button onClick={() => removeUserField(field.id)} className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    {userConfig.userFields.length === 0 && <div className="text-center text-gray-500 py-4 italic">No custom fields configured.</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+               <button onClick={handleSaveUserConfig} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  Save Configuration
+              </button>
+            </div>
+          </div>
+        );
+
       case 'global-settings':
+        // ... (rest of the file remains unchanged)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
@@ -473,12 +698,12 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
             </div>
 
             {/* Role Tabs */}
-            <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg mb-6 w-fit">
-              {['Admin', 'Editor', 'Viewer'].map((role) => (
+            <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg mb-6 w-fit overflow-x-auto">
+              {userConfig.userTypes.map((role) => (
                 <button 
                   key={role}
                   onClick={() => setActiveRoleTab(role)} 
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeRoleTab === role ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                  className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeRoleTab === role ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
                 >
                   {role}
                 </button>
@@ -542,6 +767,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         );
 
       case 'dashboard-layout':
+      case 'menu-layout':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
@@ -661,6 +887,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         );
       
       case 'system-student-field':
+        // ... (rest of the file remains unchanged)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">

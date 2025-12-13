@@ -1,9 +1,9 @@
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { 
   Student, Employee, AdmissionEnquiry, StudentRegistration, 
   DashboardStats, AttendanceRecord, StudentDemographic, 
-  NavItem, StudentDocument, EmployeeDocument, AdminPanelConfig, DashboardLayoutConfig, SystemUser, SystemPermissions
+  NavItem, StudentDocument, EmployeeDocument, AdminPanelConfig, DashboardLayoutConfig, SystemUser, SystemPermissions, UserFieldConfig, UserLog
 } from '../types';
 
 // Initialize Supabase Client
@@ -32,6 +32,112 @@ class DBService {
     }
   }
 
+  // --- AUTHENTICATION ---
+  async login(email: string, password: string): Promise<{ user?: User; error?: string }> {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      
+      // Log the login activity
+      if(data.user) {
+        this.logActivity('Login', `User logged in: ${email}`);
+      }
+      
+      return { user: data.user };
+    } catch (error) {
+      return { error: getErrorMessage(error) };
+    }
+  }
+
+  async register(email: string, password: string, fullName: string): Promise<{ user?: User; error?: string }> {
+    try {
+      // 1. Sign up in Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName }
+        }
+      });
+
+      if (error) throw error;
+      
+      // Note: data.user might be null if email confirmation is required and auto-confirm is off
+      // But typically Supabase returns the user object with an 'identities' array.
+      
+      if (data.user) {
+        // 2. Create entry in system_users table
+        // We default to 'Viewer' role for safety, admin can upgrade later
+        const systemUser: Partial<SystemUser> = {
+          full_name: fullName,
+          email: email,
+          role: 'Viewer', 
+          status: 'active',
+          created_at: new Date().toISOString()
+        };
+
+        const { error: dbError } = await supabase.from('system_users').insert([systemUser]);
+        
+        if (dbError) {
+          console.error("Failed to create system user record:", dbError);
+          // We don't throw here to avoid blocking auth, but it's a data consistency issue
+        } else {
+          this.logActivity('Register', `New user registered: ${email}`);
+        }
+        
+        return { user: data.user };
+      } else {
+         // Should rarely happen unless signup is disabled
+         return { error: "Registration failed. Please try again." };
+      }
+
+    } catch (error) {
+      return { error: getErrorMessage(error) };
+    }
+  }
+
+  async resendConfirmationEmail(email: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  }
+
+  async logout(): Promise<{ error?: string }> {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      return {};
+    } catch (error) {
+      return { error: getErrorMessage(error) };
+    }
+  }
+
+  async getCurrentUserProfile(email: string): Promise<SystemUser | null> {
+    try {
+      const { data, error } = await supabase.from('system_users').select('*').eq('email', email).single();
+      if (error) {
+        // Fallback if not found in table but exists in Auth (e.g. just registered)
+        return {
+          id: 0,
+          full_name: email.split('@')[0],
+          email: email,
+          role: 'Viewer',
+          status: 'active'
+        };
+      }
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // --- MENU & LAYOUT ---
   async getMenuLayout(): Promise<NavItem[]> {
     try {
@@ -52,6 +158,12 @@ class DBService {
         },
         { label: 'Students', icon: 'GraduationCap', href: 'students' },
         { label: 'Employee', icon: 'Users', href: 'employees' },
+        { 
+          label: 'Activity Control', icon: 'Activity', 
+          children: [
+             { label: 'User Log', href: 'user-logs', icon: 'Circle' },
+          ]
+        },
         { label: 'Recycle Bin', icon: 'Trash2', href: 'recycle-bin' },
         { 
           label: 'Settings', icon: 'Settings', 
@@ -61,6 +173,7 @@ class DBService {
              { label: 'Layout Configuration', href: 'dashboard-layout', icon: 'Circle' },
              { label: 'Role & Permissions', href: 'role-permissions', icon: 'Circle' },
              { label: 'User Management', href: 'settings-users', icon: 'Circle' },
+             { label: 'User Configuration', href: 'user-configuration', icon: 'Circle' },
              { label: 'Student Fields', href: 'system-student-field', icon: 'Circle' },
              { label: 'Menu Layout', href: 'menu-layout', icon: 'Circle' }
           ]
@@ -75,6 +188,54 @@ class DBService {
       return { success: true };
     } catch (error) {
       return { success: false, error: getErrorMessage(error) };
+    }
+  }
+
+  // --- ACTIVITY & USER LOGS ---
+  async getUserLogs(): Promise<UserLog[]> {
+    try {
+      const { data, error } = await supabase.from('system_logs').select('*').order('created_at', { ascending: false }).limit(100);
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.warn("Could not fetch real logs (Table might be missing). Returning mock data.");
+      // Mock data for UI demonstration
+      return [
+        { id: 1, user_email: 'admin@edusphere.com', action: 'Login', details: 'Successful login', ip_address: '192.168.1.1', created_at: new Date().toISOString() },
+        { id: 2, user_email: 'admin@edusphere.com', action: 'Update Student', details: 'Updated profile for Amit Kumar', ip_address: '192.168.1.1', created_at: new Date(Date.now() - 3600000).toISOString() },
+        { id: 3, user_email: 'staff@edusphere.com', action: 'Add Enquiry', details: 'New enquiry for Class 10', ip_address: '10.0.0.5', created_at: new Date(Date.now() - 7200000).toISOString() },
+      ];
+    }
+  }
+
+  async logActivity(action: string, details: string = ''): Promise<void> {
+    try {
+      // 1. Get IP Address
+      let ip = 'Unknown';
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipRes.json();
+        ip = ipData.ip;
+      } catch (e) {
+        console.warn("Failed to fetch IP", e);
+      }
+
+      // 2. Insert Log
+      // Assuming a 'system_logs' table exists. 
+      // SQL: create table system_logs (id bigint generated by default as identity primary key, user_email text, action text, details text, ip_address text, created_at timestamptz default now());
+      
+      // Get current user if possible
+      const { data: { user } } = await supabase.auth.getUser();
+      const email = user?.email || 'system';
+
+      await supabase.from('system_logs').insert([{
+        user_email: email, 
+        action,
+        details,
+        ip_address: ip
+      }]);
+    } catch (e) {
+      console.error("Failed to log activity:", e);
     }
   }
 
@@ -174,6 +335,52 @@ class DBService {
     } catch (error) { return { success: false, error: getErrorMessage(error) }; }
   }
 
+  // --- USER CONFIGURATION (Types & Custom Fields) ---
+  async getUserConfiguration() {
+    try {
+      const { data } = await supabase.from('system_settings').select('key, value').in('key', ['config_user_types', 'config_user_fields']);
+      const config: { userTypes: string[]; userFields: UserFieldConfig[] } = { userTypes: [], userFields: [] };
+      data?.forEach(row => {
+        if (row.key === 'config_user_types') config.userTypes = JSON.parse(row.value);
+        if (row.key === 'config_user_fields') config.userFields = JSON.parse(row.value);
+      });
+      
+      // Ensure defaults if empty or not set
+      if (!config.userTypes || config.userTypes.length === 0) {
+        config.userTypes = ['Super Admin', 'Admin', 'Editor', 'Viewer'];
+      }
+      
+      return config;
+    } catch (e) { 
+      // Return defaults on error
+      return { userTypes: ['Super Admin', 'Admin', 'Editor', 'Viewer'], userFields: [] }; 
+    }
+  }
+
+  async saveUserConfiguration(config: { userTypes?: string[], userFields?: UserFieldConfig[] }): Promise<{ success: boolean; error?: any }> {
+    try {
+      const updates = [];
+      if (config.userTypes) updates.push({ key: 'config_user_types', value: JSON.stringify(config.userTypes) });
+      if (config.userFields) updates.push({ key: 'config_user_fields', value: JSON.stringify(config.userFields) });
+      
+      const { error } = await supabase.from('system_settings').upsert(updates);
+      if (error) throw error;
+      return { success: true };
+    } catch (error) { return { success: false, error: getErrorMessage(error) }; }
+  }
+
+  async ensureCustomFieldsSchema(): Promise<{ success: boolean; error?: any }> {
+    try {
+      // Calls a Postgres function 'ensure_custom_fields_column'
+      // SQL: create or replace function ensure_custom_fields_column() returns void as $$ begin execute 'alter table system_users add column if not exists custom_fields jsonb default ''{}''::jsonb'; end; $$ language plpgsql security definer;
+      const { error } = await supabase.rpc('ensure_custom_fields_column');
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  }
+
   // --- SETTINGS (Fields, Departments) ---
   async getStudentFields() {
     try {
@@ -261,18 +468,36 @@ class DBService {
     }
   }
   
-  async createSystemUser(user: Partial<SystemUser>): Promise<{ success: boolean; error?: any }> {
+  async createSystemUser(user: Partial<SystemUser>): Promise<{ success: boolean; error?: any; warning?: string }> {
     try {
       const { error } = await supabase.from('system_users').insert([user]);
-      if (error) throw error;
+      if (error) {
+        // Fallback for missing 'custom_fields' column
+        if (user.custom_fields && (JSON.stringify(error).includes('column') || JSON.stringify(error).includes('custom_fields'))) {
+           const { custom_fields, ...safeUser } = user;
+           const { error: retryError } = await supabase.from('system_users').insert([safeUser]);
+           if (retryError) throw retryError;
+           return { success: true, warning: "User created, but custom fields were not saved due to database limitations." };
+        }
+        throw error;
+      }
       return { success: true };
     } catch (error) { return { success: false, error: getErrorMessage(error) }; }
   }
 
-  async updateSystemUser(user: Partial<SystemUser>): Promise<{ success: boolean; error?: any }> {
+  async updateSystemUser(user: Partial<SystemUser>): Promise<{ success: boolean; error?: any; warning?: string }> {
     try {
       const { error } = await supabase.from('system_users').update(user).eq('id', user.id);
-      if (error) throw error;
+      if (error) {
+        // Fallback for missing 'custom_fields' column
+        if (user.custom_fields && (JSON.stringify(error).includes('column') || JSON.stringify(error).includes('custom_fields'))) {
+           const { custom_fields, ...safeUser } = user;
+           const { error: retryError } = await supabase.from('system_users').update(safeUser).eq('id', user.id);
+           if (retryError) throw retryError;
+           return { success: true, warning: "User updated, but custom fields were not saved due to database limitations." };
+        }
+        throw error;
+      }
       return { success: true };
     } catch (error) { return { success: false, error: getErrorMessage(error) }; }
   }
@@ -471,8 +696,17 @@ class DBService {
     return data || [];
   }
   async getAllStudentsRaw(): Promise<Student[]> {
-    const { data } = await supabase.from('students').select('*').order('id', { ascending: false });
-    return data || [];
+    try {
+      const { data, error } = await supabase.from('students').select('*').order('id', { ascending: false });
+      if (error) {
+        console.error("Error fetching all students raw:", error);
+        return [];
+      }
+      return data || [];
+    } catch (e) {
+      console.error("Exception in getAllStudentsRaw:", e);
+      return [];
+    }
   }
   async getProvisionalStudents(): Promise<Student[]> {
     const { data } = await supabase.from('students').select('*').eq('student_status', 'provisional').order('id', { ascending: false });

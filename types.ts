@@ -72,13 +72,17 @@ export interface Employee { // Renamed from Teacher
   id: number;
   name?: string; // For backward compatibility if old data exists
   full_name: string;
-  subject?: string; // Kept as subject/designation
+  subject?: string; // Kept as subject/designation (Role)
+  department?: string; // New field
   phone?: string;
   email?: string;
   address?: string;
   dob?: string;
   gender?: string;
+  blood_group?: string; // New field
   qualification?: string;
+  experience_details?: string; // New field
+  total_experience?: string; // New field
   joining_date?: string;
   photo_url?: string;
   status?: 'active' | 'inactive';
@@ -92,17 +96,19 @@ export interface Employee { // Renamed from Teacher
   upi_id?: string;
   // Salary Details
   salary_amount?: number;
+  custom_fields?: Record<string, any>;
 }
 
 export interface SystemUser {
   id: number;
   full_name: string;
   email: string;
-  role: 'Super Admin' | 'Admin' | 'Editor' | 'Viewer';
+  role: string;
   status: 'active' | 'inactive';
   avatar_url?: string;
   last_login?: string;
   created_at?: string;
+  custom_fields?: Record<string, any>; // Dynamic fields storage
 }
 
 export interface EmployeeSalaryPayment { // Renamed from TeacherSalaryPayment
@@ -255,4 +261,21 @@ export interface RolePermissions {
 
 export interface SystemPermissions {
   [role: string]: RolePermissions;
+}
+
+export interface UserFieldConfig {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'email' | 'date' | 'select' | 'textarea';
+  options?: string; // Comma separated for select
+  required: boolean;
+}
+
+export interface UserLog {
+  id: number;
+  user_email: string;
+  action: string; // e.g., 'Login', 'Update Student', 'Delete User'
+  details?: string;
+  ip_address: string;
+  created_at: string;
 }

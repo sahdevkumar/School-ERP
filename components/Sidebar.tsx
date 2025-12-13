@@ -1,5 +1,5 @@
 
-import * as React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight,
@@ -10,6 +10,7 @@ import {
 import { NavItem, UserProfile } from '../types';
 import { dbService } from '../services/supabase';
 import { getIcon } from '../utils/iconMap';
+import { usePermissions } from '../context/PermissionContext';
 
 interface SidebarProps {
   isOpen: boolean; // Mobile toggle state
@@ -18,6 +19,7 @@ interface SidebarProps {
   closeMobileSidebar: () => void;
   user: UserProfile;
   onNavigate: (page: string, data?: any) => void;
+  onLogout: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -26,41 +28,57 @@ export const Sidebar: React.FC<SidebarProps> = ({
   toggleCollapse, 
   closeMobileSidebar,
   user,
-  onNavigate
+  onNavigate,
+  onLogout
 }) => {
-  const [navItems, setNavItems] = React.useState<NavItem[]>([]);
-  const [activeLink, setActiveLink] = React.useState('dashboard');
-  const [expandedMenus, setExpandedMenus] = React.useState<string[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const { can, isLoading: isPermissionsLoading } = usePermissions();
+  const [navItems, setNavItems] = useState<NavItem[]>([]);
+  const [activeLink, setActiveLink] = useState('dashboard');
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [isMenuLoading, setIsMenuLoading] = useState(true);
   
   // Core System State
-  const [systemTitle, setSystemTitle] = React.useState('EduSphere');
-  const [logoUrl, setLogoUrl] = React.useState<string | null>(null);
+  const [systemTitle, setSystemTitle] = useState('EduSphere');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const loadCoreSystem = async () => {
-      setIsLoading(true);
+      setIsMenuLoading(true);
       
-      // Load Menu
-      const menuLayout = await dbService.getMenuLayout();
-      setNavItems(menuLayout);
-
-      // Load System Config (Title & Logo)
       try {
-        const settings = await dbService.getSystemSettings();
-        if (settings.system_title) setSystemTitle(settings.system_title);
-        else if (settings.school_name) setSystemTitle(settings.school_name);
+        // Load Menu with timeout
+        const menuPromise = dbService.getMenuLayout();
+        const settingsPromise = dbService.getSystemSettings();
         
-        if (settings.school_logo_url) setLogoUrl(settings.school_logo_url);
+        // Use a Promise.all with a global timeout for sidebar data
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Sidebar timeout'), 5000));
+        
+        const [menuLayout, settings] = await Promise.race([
+          Promise.all([menuPromise, settingsPromise]),
+          timeoutPromise
+        ]) as [NavItem[], any];
+
+        setNavItems(menuLayout || []);
+
+        if (settings) {
+          if (settings.system_title) setSystemTitle(settings.system_title);
+          else if (settings.school_name) setSystemTitle(settings.school_name);
+          
+          if (settings.school_logo_url) setLogoUrl(settings.school_logo_url);
+        }
       } catch (error) {
-        console.error("Failed to load system settings", error);
+        console.warn("Sidebar data load failed/timed out, using defaults", error);
+        // Fallback to default menu if fetch failed
+        if (navItems.length === 0) {
+           const defaults = await dbService.getMenuLayout(); // This gets defaults if DB fails anyway
+           setNavItems(defaults);
+        }
+      } finally {
+        setIsMenuLoading(false);
       }
-      
-      setIsLoading(false);
     };
     loadCoreSystem();
   }, []);
-
 
   const handleParentClick = (label: string) => {
     if (isCollapsed) {
@@ -85,14 +103,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
       closeMobileSidebar();
     }
   };
+
+  const checkAccess = (item: NavItem): boolean => {
+    let module = '';
+
+    // Map Sidebar Items to Permission Modules
+    const label = item.label.toLowerCase();
+    const href = (item.href || '').toLowerCase();
+
+    if (label === 'dashboard' || href === 'dashboard') module = 'dashboard';
+    else if (label === 'students' || href === 'students') module = 'students';
+    else if (label === 'employee' || href === 'employees' || href === 'teachers') module = 'employees';
+    else if (label === 'admission' || href.includes('admission') || href === 'registration' || href === 'admission-enquiry') module = 'admission';
+    else if (label === 'reception') module = 'admission'; // Parent container for reception
+    else if (label === 'settings' || href.includes('settings') || href.includes('config') || href === 'menu-layout' || href === 'role-permissions') module = 'settings';
+    else if (label === 'user management' || href === 'users' || href === 'settings-users') module = 'users';
+    else if (label === 'activity control' || href === 'user-logs') module = 'activity';
+    else if (label === 'recycle bin' || href === 'recycle-bin') module = 'recycle_bin';
+
+    // If mapped to a module, check 'view' permission
+    if (module) {
+      return can(module, 'view');
+    }
+
+    // If parent with children, show if at least one child is accessible
+    if (item.children && item.children.length > 0) {
+      return item.children.some(child => checkAccess(child));
+    }
+
+    // Default allow if no restriction found (e.g. custom external links)
+    return true; 
+  };
   
   const renderNavItem = (item: NavItem) => {
+    // Permission Check using Context
+    if (!checkAccess(item)) return null;
+
     const isExpanded = expandedMenus.includes(item.label);
     const hasChildren = item.children && item.children.length > 0;
+    
+    // Filter children based on permissions
+    const visibleChildren = hasChildren ? item.children!.filter(child => checkAccess(child)) : [];
+    const hasVisibleChildren = visibleChildren.length > 0;
+
     const isActive = activeLink === item.href;
     const Icon = getIcon(item.icon);
 
-    if (hasChildren) {
+    if (hasVisibleChildren) {
       return (
         <div key={item.label}>
           <button 
@@ -113,12 +170,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded && !isCollapsed ? 'max-h-96' : 'max-h-0'}`}
           >
             <div className="pl-8 pt-2 space-y-2">
-              {item.children?.map(child => renderNavItem(child))}
+              {visibleChildren.map(child => renderNavItem(child))}
             </div>
           </div>
         </div>
       );
     }
+
+    // If it's a parent but all children are hidden, don't render
+    if (hasChildren && !hasVisibleChildren) return null;
 
     return (
       <a 
@@ -173,7 +233,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-          {isLoading ? (
+          {isMenuLoading || isPermissionsLoading ? (
             <div className="text-center text-gray-500 text-sm mt-4">Loading Menu...</div>
           ) : (
             navItems.map(item => renderNavItem(item))
@@ -182,19 +242,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* User Profile Footer */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-3">
-            <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
+          <div className={`flex items-center gap-3 ${isCollapsed ? 'flex-col justify-center' : ''}`}>
+            <img src={user.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}`} alt={user.name} className="w-10 h-10 rounded-full object-cover shrink-0 bg-gray-200 dark:bg-gray-700" />
             {!isCollapsed && (
               <div className="flex-1 overflow-hidden">
                 <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">{user.name}</p>
                 <p className="text-xs text-gray-500 truncate">{user.role}</p>
               </div>
             )}
-            {!isCollapsed && (
-              <button className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                <LogOut className="w-5 h-5" />
-              </button>
-            )}
+            <button 
+              onClick={onLogout}
+              className={`p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors ${isCollapsed ? 'mt-2' : ''}`}
+              title="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </aside>

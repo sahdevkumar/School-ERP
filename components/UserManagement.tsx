@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, Shield, Search, Plus, Loader2, Edit, Trash2, CheckCircle, XCircle, Camera, User, X, Save
+  Users, Shield, Search, Plus, Loader2, Edit, Trash2, CheckCircle, XCircle, Camera, User, X, Save, FileText
 } from 'lucide-react';
-import { dbService } from '../services/supabase';
-import { SystemUser } from '../types';
+import { dbService, supabase } from '../services/supabase';
+import { SystemUser, UserFieldConfig } from '../types';
 import { useToast } from '../context/ToastContext';
 import { ImageEditor } from './ImageEditor';
 
@@ -19,30 +19,70 @@ export const UserManagement: React.FC = () => {
   const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [userTypes, setUserTypes] = useState<string[]>([]); // Dynamic user types from DB
+  const [userFields, setUserFields] = useState<UserFieldConfig[]>([]); // Dynamic form fields
+  
+  // Access Control State
+  const [currentUserRole, setCurrentUserRole] = useState<string>('');
+  const [currentEmail, setCurrentEmail] = useState<string>('');
 
   const { showToast } = useToast();
 
   useEffect(() => {
     fetchUsers();
+    fetchUserConfig();
   }, []);
 
   const fetchUsers = async () => {
     setIsLoading(true);
-    const data = await dbService.getSystemUsers();
+    
+    // 1. Get Current Session User
+    const { data: { session } } = await supabase.auth.getSession();
+    const email = session?.user?.email;
+    setCurrentEmail(email || '');
+
+    // 2. Fetch All System Users
+    let data = await dbService.getSystemUsers();
+    
+    // 3. Determine Current User Role
+    // Fallback: If user not in table but authenticated, treat as Viewer/Restricted
+    const myself = data.find(u => u.email === email);
+    const myRole = myself?.role || 'Viewer'; 
+    setCurrentUserRole(myRole);
+
+    // 4. Filter List based on Role
+    // If not Admin/Super Admin, only show self
+    const isAdmin = ['Super Admin', 'Admin'].includes(myRole);
+    if (!isAdmin && email) {
+      data = data.filter(u => u.email === email);
+    } else if (!isAdmin && !email) {
+      data = []; // Should not happen if logged in
+    }
+
     setUsers(data);
     setIsLoading(false);
   };
 
+  const fetchUserConfig = async () => {
+    const config = await dbService.getUserConfiguration();
+    setUserTypes(config.userTypes || []);
+    setUserFields(config.userFields || []);
+  };
+
   const handleOpenModal = (user?: SystemUser) => {
     if (user) {
-      setEditingUser(user);
+      setEditingUser({
+        ...user,
+        custom_fields: user.custom_fields || {}
+      });
       setPhotoPreview(user.avatar_url || null);
     } else {
       setEditingUser({
         full_name: '',
         email: '',
-        role: 'Viewer',
-        status: 'active'
+        role: '',
+        status: 'active',
+        custom_fields: {}
       });
       setPhotoPreview(null);
     }
@@ -51,9 +91,34 @@ export const UserManagement: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingUser.full_name || !editingUser.email) {
-      showToast("Name and Email are required", 'error');
+    
+    // Basic Validation
+    if (!editingUser.full_name?.trim()) {
+      showToast("Full Name is required", 'error');
       return;
+    }
+    if (!editingUser.email?.trim()) {
+      showToast("Email is required", 'error');
+      return;
+    }
+    if (!editingUser.role) {
+      showToast("Role is required", 'error');
+      return;
+    }
+
+    // Role Integrity Validation
+    // Ensure the selected role exists in the configured User Types
+    if (userTypes.length > 0 && !userTypes.includes(editingUser.role)) {
+      showToast(`Invalid role selected. '${editingUser.role}' is not a valid User Type.`, 'error');
+      return;
+    }
+
+    // Validate required custom fields
+    for (const field of userFields) {
+      if (field.required && (!editingUser.custom_fields || !editingUser.custom_fields[field.label])) {
+        showToast(`${field.label} is required`, 'error');
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -66,7 +131,11 @@ export const UserManagement: React.FC = () => {
     
     setIsSaving(false);
     if (result.success) {
-      showToast(editingUser.id ? "User updated" : "User created");
+      if (result.warning) {
+        showToast(result.warning, 'info');
+      } else {
+        showToast(editingUser.id ? "User updated" : "User created");
+      }
       setModalOpen(false);
       fetchUsers();
     } else {
@@ -115,10 +184,70 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const handleCustomFieldChange = (label: string, value: any) => {
+    setEditingUser(prev => ({
+      ...prev,
+      custom_fields: {
+        ...prev.custom_fields,
+        [label]: value
+      }
+    }));
+  };
+
+  const renderCustomField = (field: UserFieldConfig) => {
+    const value = editingUser.custom_fields?.[field.label] || '';
+
+    switch (field.type) {
+      case 'textarea':
+        return (
+          <textarea
+            value={value}
+            onChange={(e) => handleCustomFieldChange(field.label, e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+            rows={2}
+          />
+        );
+      case 'select':
+        const options = field.options ? field.options.split(',').map(o => o.trim()) : [];
+        return (
+          <select
+            value={value}
+            onChange={(e) => handleCustomFieldChange(field.label, e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="">Select {field.label}</option>
+            {options.map((opt, idx) => (
+              <option key={idx} value={opt}>{opt}</option>
+            ))}
+          </select>
+        );
+      case 'date':
+        return (
+          <input
+            type="date"
+            value={value}
+            onChange={(e) => handleCustomFieldChange(field.label, e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        );
+      default:
+        return (
+          <input
+            type={field.type}
+            value={value}
+            onChange={(e) => handleCustomFieldChange(field.label, e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        );
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const isAdmin = ['Super Admin', 'Admin'].includes(currentUserRole);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
@@ -126,155 +255,264 @@ export const UserManagement: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
           <Users className="w-8 h-8 text-indigo-600" /> User Management
         </h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage system administrators and staff access.</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage system users, roles, and access.</p>
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="relative w-full sm:w-96">
-          <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Search users..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-          />
-        </div>
-        <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors">
-          <Plus className="w-4 h-4"/> Add User
-        </button>
+         <div className="relative w-full sm:w-96">
+            <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search by name or email..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            />
+         </div>
+         <div className="flex gap-2">
+            {isAdmin && (
+              <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors">
+                  <Plus className="w-4 h-4"/> Add User
+              </button>
+            )}
+         </div>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-12"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-600"/></div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredUsers.map(user => (
-            <div key={user.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
-              <div className="p-6 flex flex-col items-center text-center flex-1">
-                <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-700 mb-4 overflow-hidden border-2 border-white dark:border-gray-600 shadow-md">
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-400">{user.full_name.charAt(0)}</div>
-                  )}
-                </div>
-                <h3 className="font-bold text-gray-900 dark:text-white text-lg">{user.full_name}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{user.email}</p>
-                <div className="flex gap-2 mb-4">
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                    user.role === 'Super Admin' ? 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800' :
-                    user.role === 'Admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800' :
-                    'bg-gray-50 text-gray-700 border-gray-100 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
-                  }`}>
-                    {user.role}
-                  </span>
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                    user.status === 'active' ? 'bg-green-50 text-green-700 border-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
-                    'bg-gray-50 text-gray-700 border-gray-100 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
-                  }`}>
-                    {user.status}
-                  </span>
-                </div>
-              </div>
-              <div className="flex border-t border-gray-100 dark:border-gray-700">
-                <button onClick={() => handleOpenModal(user)} className="flex-1 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center justify-center gap-2 border-r border-gray-100 dark:border-gray-700">
-                  <Edit className="w-4 h-4" /> Edit
-                </button>
-                <button onClick={() => handleDelete(user.id)} className="flex-1 py-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center gap-2">
-                  <Trash2 className="w-4 h-4" /> Delete
-                </button>
-              </div>
-            </div>
-          ))}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold tracking-wider">
+                <th className="px-6 py-4">User</th>
+                <th className="px-6 py-4">Role</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Last Login</th>
+                <th className="px-6 py-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-500" />
+                    Loading users...
+                  </td>
+                </tr>
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    No users found.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex-shrink-0 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold overflow-hidden">
+                          {user.avatar_url ? (
+                            <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                          ) : (
+                            user.full_name.charAt(0)
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-white">{user.full_name}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5">
+                        {user.status === 'active' ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Active</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4 text-red-500" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Inactive</span>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                      {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => handleOpenModal(user)} 
+                          className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors" 
+                          title="Edit User"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        {isAdmin && (
+                          <button 
+                            onClick={() => handleDelete(user.id)} 
+                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors" 
+                            title="Delete User"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-scale-in">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setModalOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                 {editingUser.id ? 'Edit User' : 'Add New User'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><X className="w-5 h-5 text-gray-500"/></button>
+              <button onClick={() => setModalOpen(false)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors text-gray-500">
+                <X className="w-5 h-5"/>
+              </button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div className="flex justify-center mb-6">
-                <div className="relative group cursor-pointer">
-                  <div className="w-24 h-24 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center">
-                    {photoPreview ? <img src={photoPreview} alt="" className="w-full h-full object-cover" /> : <User className="w-10 h-10 text-gray-400" />}
+            <div className="p-6 overflow-y-auto custom-scrollbar">
+              <form id="user-form" onSubmit={handleSave} className="space-y-5">
+                
+                {/* Avatar Upload */}
+                <div className="flex justify-center mb-6">
+                  <div className="relative group cursor-pointer">
+                    <div className="w-24 h-24 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center overflow-hidden border-2 border-dashed border-indigo-300 dark:border-indigo-700">
+                      {photoPreview ? (
+                        <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-10 h-10 text-indigo-400" />
+                      )}
+                    </div>
+                    <label className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Camera className="w-6 h-6 text-white" />
+                      <input type="file" className="hidden" accept="image/*" onChange={handlePhotoSelect} disabled={isUploadingPhoto} />
+                    </label>
+                    {isUploadingPhoto && (
+                      <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
                   </div>
-                  <label className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Camera className="w-6 h-6 text-white" />
-                    <input type="file" className="hidden" accept="image/*" onChange={handlePhotoSelect} disabled={isUploadingPhoto} />
-                  </label>
-                  {isUploadingPhoto && <div className="absolute inset-0 bg-white/80 dark:bg-black/80 flex items-center justify-center rounded-full"><Loader2 className="w-6 h-6 animate-spin text-indigo-600"/></div>}
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
-                <input 
-                  value={editingUser.full_name || ''} 
-                  onChange={e => setEditingUser({...editingUser, full_name: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
-                />
-              </div>
-              
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label>
-                <input 
-                  type="email"
-                  value={editingUser.email || ''} 
-                  onChange={e => setEditingUser({...editingUser, email: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
-                />
-              </div>
+                <div className="grid grid-cols-1 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Full Name <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      value={editingUser.full_name} 
+                      onChange={(e) => setEditingUser({...editingUser, full_name: e.target.value})}
+                      className="w-full pl-4 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="John Doe"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
-                  <select 
-                    value={editingUser.role} 
-                    onChange={e => setEditingUser({...editingUser, role: e.target.value as any})}
-                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Viewer">Viewer</option>
-                    <option value="Editor">Editor</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Super Admin">Super Admin</option>
-                  </select>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address <span className="text-red-500">*</span></label>
+                    <input 
+                      type="email" 
+                      value={editingUser.email} 
+                      onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
+                      className="w-full pl-4 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-60"
+                      placeholder="john@example.com"
+                      disabled={!!editingUser.id} // Cannot change email after creation
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Role <span className="text-red-500">*</span></label>
+                    <select 
+                      value={editingUser.role} 
+                      onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+                      disabled={!isAdmin}
+                      className={`w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      <option value="">Select Role</option>
+                      {userTypes.map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-white">Account Status</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Toggle user access to the system</p>
+                    </div>
+                    <button 
+                      type="button"
+                      disabled={!isAdmin}
+                      onClick={() => isAdmin && setEditingUser({...editingUser, status: editingUser.status === 'active' ? 'inactive' : 'active'})}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:ring-offset-gray-800 ${
+                        editingUser.status === 'active' ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-600'
+                      } ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${editingUser.status === 'active' ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+
+                  {/* Dynamic Custom Fields */}
+                  {userFields.length > 0 && (
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Additional Information</h4>
+                      <div className="space-y-4">
+                        {userFields.map(field => (
+                          <div key={field.id} className="space-y-1.5">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {field.label} {field.required && <span className="text-red-500">*</span>}
+                            </label>
+                            {renderCustomField(field)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                 </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
-                  <select 
-                    value={editingUser.status} 
-                    onChange={e => setEditingUser({...editingUser, status: e.target.value as any})}
-                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
+              </form>
+            </div>
 
-              <div className="pt-4 flex justify-end gap-3">
-                <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
-                <button type="submit" disabled={isSaving || isUploadingPhoto} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2">
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4" />} Save
-                </button>
-              </div>
-            </form>
+            <div className="p-5 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-end gap-3">
+              <button 
+                onClick={() => setModalOpen(false)}
+                className="px-5 py-2.5 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                Save User
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {isEditorOpen && selectedImageSrc && (
-        <ImageEditor imageSrc={selectedImageSrc} onClose={() => setIsEditorOpen(false)} onSave={handleEditorSave} />
+        <ImageEditor 
+          imageSrc={selectedImageSrc} 
+          onClose={() => setIsEditorOpen(false)} 
+          onSave={handleEditorSave} 
+        />
       )}
     </div>
   );
