@@ -1,25 +1,25 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
-import { Dashboard } from './components/Dashboard';
-import { StudentManagement } from './components/StudentManagement';
-import { Employees } from './components/Employees'; // Import Employees
-import { Settings } from './components/Settings';
-import { AdmissionEnquiry } from './components/AdmissionEnquiry';
-import { Registration } from './components/Registration';
-import { RecycleBin } from './components/RecycleBin';
-import { GeminiChatWidget } from './components/GeminiChatWidget';
-import { Admission } from './components/Admission';
-import { DepartmentSettings } from './components/DepartmentSettings';
-import { UserManagement } from './components/UserManagement'; // Import UserManagement
-import { UserLogs } from './components/UserLogs'; // Import UserLogs
 import { ToastProvider } from './context/ToastContext';
-import { PermissionProvider } from './context/PermissionContext'; // Import PermissionProvider
+import { PermissionProvider } from './context/PermissionContext';
 import { UserProfile } from './types';
 import { dbService, supabase } from './services/supabase';
 import { LoginPage } from './components/LoginPage';
 import { Loader2 } from 'lucide-react';
+
+// Lazy Load Components to optimize memory usage and bundle size
+const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
+const StudentManagement = React.lazy(() => import('./components/StudentManagement').then(module => ({ default: module.StudentManagement })));
+const Employees = React.lazy(() => import('./components/Employees').then(module => ({ default: module.Employees })));
+const Settings = React.lazy(() => import('./components/Settings').then(module => ({ default: module.Settings })));
+const AdmissionEnquiry = React.lazy(() => import('./components/AdmissionEnquiry').then(module => ({ default: module.AdmissionEnquiry })));
+const Registration = React.lazy(() => import('./components/Registration').then(module => ({ default: module.Registration })));
+const RecycleBin = React.lazy(() => import('./components/RecycleBin').then(module => ({ default: module.RecycleBin })));
+const Admission = React.lazy(() => import('./components/Admission').then(module => ({ default: module.Admission })));
+const DepartmentSettings = React.lazy(() => import('./components/DepartmentSettings').then(module => ({ default: module.DepartmentSettings })));
+const UserManagement = React.lazy(() => import('./components/UserManagement').then(module => ({ default: module.UserManagement })));
+const UserLogs = React.lazy(() => import('./components/UserLogs').then(module => ({ default: module.UserLogs })));
 
 export const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -158,7 +158,6 @@ export const App: React.FC = () => {
       } catch (error) {
         console.error("Logout API error:", error);
       } finally {
-        // Aggressively clear storage to prevent stuck sessions
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith('sb-') || key.includes('supabase')) {
             localStorage.removeItem(key);
@@ -267,10 +266,14 @@ export const App: React.FC = () => {
           <main className={`transition-all duration-300 pt-20 px-4 md:px-6 pb-8 min-h-screen
             ${isCollapsed ? 'lg:ml-20' : 'lg:ml-72'}
           `}>
-            {renderContent()}
+            <Suspense fallback={
+              <div className="flex items-center justify-center min-h-[50vh]">
+                <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+              </div>
+            }>
+              {renderContent()}
+            </Suspense>
           </main>
-
-          <GeminiChatWidget />
         </div>
       </PermissionProvider>
     </ToastProvider>
