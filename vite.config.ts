@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
       'process.env': env
     },
     build: {
+      sourcemap: false, // Critical for low memory environments
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
