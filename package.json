@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS=--max-old-space-size=1536 vite build",
+    "build": "NODE_OPTIONS='--max-old-space-size=460' vite build",
     "preview": "vite preview"
   },
   "dependencies": {

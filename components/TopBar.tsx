@@ -22,6 +22,7 @@ export const TopBar: React.FC<TopBarProps> = ({ toggleMobileSidebar, isDark, tog
           <button 
             onClick={toggleMobileSidebar}
             className="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden"
+            title="Toggle Menu"
           >
             <Menu className="w-6 h-6" />
           </button>
@@ -31,20 +32,21 @@ export const TopBar: React.FC<TopBarProps> = ({ toggleMobileSidebar, isDark, tog
             <input 
               type="text" 
               placeholder="Search students, classes..." 
-              className="pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700/50 border-none rounded-full text-sm focus:ring-2 focus:ring-indigo-500 w-64 dark:text-white"
+              className="pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700/50 border-none rounded-full text-sm focus:ring-2 focus:ring-indigo-500 w-64 dark:text-white transition-all focus:w-80"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 relative">
+          <button className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 relative" title="Notifications">
             <Bell className="w-6 h-6" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
           </button>
           
           <button 
             onClick={toggleTheme}
             className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
             {isDark ? <Sun className="w-6 h-6 text-yellow-500" /> : <Moon className="w-6 h-6 text-gray-600" />}
           </button>
