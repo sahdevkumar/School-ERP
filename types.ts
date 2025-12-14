@@ -201,45 +201,32 @@ export interface StudentRegistration {
 
 // Fee Types
 export interface FeeStructure {
-  id?: number;
+  id: number;
   name: string;
-  class_id?: string; // Which class this fee applies to
-  amount: number;
-  frequency: 'Monthly' | 'Quarterly' | 'Yearly' | 'One Time';
-  due_date_day?: number; // Day of month
   description?: string;
+  amount: number;
+  frequency: string;
 }
 
 export interface StudentFeeDue {
   id: number;
   student_id: number;
   fee_structure_id: number;
-  fee_name: string;
+  fee_name?: string; // Joined field
+  due_date: string;
   amount_due: number;
   amount_paid: number;
-  due_date: string;
-  status: 'pending' | 'paid' | 'partially_paid' | 'overdue';
+  status: 'pending' | 'paid' | 'partially_paid';
 }
 
 export interface FeePayment {
   id?: number;
   student_id: number;
+  due_id?: number | null;
   amount: number;
   payment_date: string;
-  payment_mode: 'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque';
-  transaction_ref?: string;
-  remarks?: string;
-  created_at?: string;
-}
-
-export interface Expense {
-  id?: number;
-  title: string;
-  category: string;
-  amount: number;
-  date: string;
-  payment_mode: string;
-  recipient?: string;
+  payment_mode: 'cash' | 'upi' | 'account' | 'cheque';
+  transaction_details?: any;
   notes?: string;
   created_at?: string;
 }

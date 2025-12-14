@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   School, 
   Mail, 
@@ -9,7 +9,9 @@ import {
   Loader2, 
   CheckCircle, 
   AlertTriangle,
-  Send
+  Send,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { useToast } from '../context/ToastContext';
@@ -28,8 +30,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   
   const { showToast } = useToast();
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      const connected = await dbService.checkConnection();
+      setDbStatus(connected ? 'connected' : 'disconnected');
+    };
+    checkConnection();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,6 +233,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 {isLogin ? 'Sign up' : 'Log in'}
               </button>
             </p>
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700 flex justify-center">
+             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+               dbStatus === 'checking' ? 'bg-gray-100 text-gray-500 border-gray-200' :
+               dbStatus === 'connected' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800' :
+               'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800'
+             }`}>
+               {dbStatus === 'checking' && <Loader2 className="w-3 h-3 animate-spin" />}
+               {dbStatus === 'connected' && <Wifi className="w-3 h-3" />}
+               {dbStatus === 'disconnected' && <WifiOff className="w-3 h-3" />}
+               <span>
+                 {dbStatus === 'checking' ? 'Checking Database...' : 
+                  dbStatus === 'connected' ? 'System Online' : 'Database Disconnected'}
+               </span>
+             </div>
           </div>
         </div>
       </div>

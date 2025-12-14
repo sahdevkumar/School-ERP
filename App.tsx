@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -21,7 +20,6 @@ const Admission = React.lazy(() => import('./components/Admission').then(module 
 const DepartmentSettings = React.lazy(() => import('./components/DepartmentSettings').then(module => ({ default: module.DepartmentSettings })));
 const UserManagement = React.lazy(() => import('./components/UserManagement').then(module => ({ default: module.UserManagement })));
 const UserLogs = React.lazy(() => import('./components/UserLogs').then(module => ({ default: module.UserLogs })));
-const Finance = React.lazy(() => import('./components/Finance').then(module => ({ default: module.Finance })));
 
 export const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -46,15 +44,7 @@ export const App: React.FC = () => {
 
     const initSession = async () => {
       try {
-        // 1. Check for Mock Session First
-        if (localStorage.getItem('mock_session')) {
-          setSession({ user: { email: 'admin@school.com' } });
-          loadUserProfile('admin@school.com');
-          setIsLoadingSession(false);
-          return;
-        }
-
-        // 2. Race Supabase Auth Check against a 5s timeout
+        // 1. Race Supabase Auth Check against a 5s timeout
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Auth check timeout')), 5000)
@@ -65,7 +55,7 @@ export const App: React.FC = () => {
         if (mounted) {
           setSession(data?.session);
           
-          // 3. If authenticated, try loading profile with a separate timeout
+          // 2. If authenticated, try loading profile with a separate timeout
           if (data?.session?.user?.email) {
             const profilePromise = loadUserProfile(data.session.user.email);
             const profileTimeout = new Promise((resolve) => setTimeout(resolve, 5000));
@@ -82,7 +72,7 @@ export const App: React.FC = () => {
 
     initSession();
 
-    // Listen for real auth changes
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (mounted) {
         setSession(session);
@@ -213,13 +203,6 @@ export const App: React.FC = () => {
       case 'admission':
         return <Admission initialSearch={pageData?.search} />;
 
-      // Finance Routes
-      case 'finance-overview':
-      case 'finance-collection':
-      case 'finance-structures':
-      case 'finance-expenses':
-        return <Finance activeTab={activePage.replace('finance-', '')} />;
-
       case 'global-settings':
       case 'school-settings':
       case 'role-permissions':
@@ -252,13 +235,7 @@ export const App: React.FC = () => {
   if (!session) {
     return (
       <ToastProvider>
-        <LoginPage onLoginSuccess={() => {
-          // Manually handle mock session state update since auth listener won't catch it
-          if (localStorage.getItem('mock_session')) {
-            setSession({ user: { email: 'admin@school.com' } });
-            loadUserProfile('admin@school.com');
-          }
-        }} />
+        <LoginPage onLoginSuccess={() => { /* State updates via onAuthStateChange */ }} />
       </ToastProvider>
     );
   }
