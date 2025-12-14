@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, Suspense } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -20,6 +21,8 @@ const Admission = React.lazy(() => import('./components/Admission').then(module 
 const DepartmentSettings = React.lazy(() => import('./components/DepartmentSettings').then(module => ({ default: module.DepartmentSettings })));
 const UserManagement = React.lazy(() => import('./components/UserManagement').then(module => ({ default: module.UserManagement })));
 const UserLogs = React.lazy(() => import('./components/UserLogs').then(module => ({ default: module.UserLogs })));
+const Fees = React.lazy(() => import('./components/Fees').then(module => ({ default: module.Fees })));
+const Attendance = React.lazy(() => import('./components/Attendance').then(module => ({ default: module.Attendance })));
 
 export const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -29,17 +32,22 @@ export const App: React.FC = () => {
   const [pageData, setPageData] = useState<any>(null);
   
   // Auth State
-  const [session, setSession] = useState<any>(null);
-  const [isLoadingSession, setIsLoadingSession] = useState(true);
+  // DEV MODE: Mock session enabled to bypass login
+  const [session, setSession] = useState<any>({ user: { email: 'admin@dev.com' } });
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
-    name: 'Admin User',
-    role: 'Viewer',
-    avatarUrl: '',
-    email: ''
+    name: 'Dev Admin',
+    role: 'Super Admin', // Full Access
+    avatarUrl: 'https://ui-avatars.com/api/?name=Dev+Admin&background=6366f1&color=fff',
+    email: 'admin@dev.com'
   });
 
   // Check Session on Mount
   useEffect(() => {
+    // DEV MODE: Auth check disabled
+    return;
+
+    /* Original Auth Logic (Enable this back for production)
     let mounted = true;
 
     const initSession = async () => {
@@ -86,6 +94,7 @@ export const App: React.FC = () => {
       mounted = false;
       subscription.unsubscribe();
     };
+    */
   }, []);
 
   const loadUserProfile = async (email: string) => {
@@ -195,6 +204,12 @@ export const App: React.FC = () => {
 
       case 'user-logs':
         return <UserLogs />;
+
+      case 'fees':
+        return <Fees />;
+        
+      case 'attendance':
+        return <Attendance />;
 
       case 'admission-enquiry':
         return <AdmissionEnquiry onNavigate={handleNavigate} />;

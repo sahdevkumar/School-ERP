@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { useToast } from '../context/ToastContext';
+import { usePermissions } from '../context/PermissionContext';
 import { NavItem, DashboardLayoutConfig, AdminPanelConfig, SystemPermissions, UserFieldConfig } from '../types';
 import { iconList, getIcon } from '../utils/iconMap';
 import { UserManagement } from './UserManagement';
@@ -62,6 +63,19 @@ const ToggleSwitch = ({ label, enabled, onChange }: { label?: string, enabled: b
   </div>
 );
 
+// Define Permission Modules
+const permissionModules = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'admission', label: 'Admission & Reception' },
+  { id: 'students', label: 'Student Management' },
+  { id: 'employees', label: 'Employees / Staff' },
+  { id: 'attendance', label: 'Attendance' },
+  { id: 'fees', label: 'Fees & Finance' },
+  { id: 'users', label: 'User Management' },
+  { id: 'settings', label: 'System Settings' },
+  { id: 'activity', label: 'User Logs / Activity' },
+  { id: 'recycle_bin', label: 'Recycle Bin' }
+];
 
 export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -82,6 +96,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { showToast } = useToast();
+  const { refreshPermissions } = usePermissions();
   
   // Logo upload state
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -185,8 +200,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
 
   const handlePermissionToggle = (role: string, module: string, action: 'view' | 'edit' | 'delete') => {
     setRolePermissions(prev => {
-      if (!prev) return null;
-      const newPermissions = JSON.parse(JSON.stringify(prev)); // Deep copy
+      const newPermissions = prev ? JSON.parse(JSON.stringify(prev)) : {};
       if (!newPermissions[role]) newPermissions[role] = {};
       if (!newPermissions[role][module]) newPermissions[role][module] = { view: false, edit: false, delete: false };
       
@@ -260,8 +274,12 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setIsSaving(true);
     const result = await dbService.saveRolePermissions(rolePermissions);
     setIsSaving(false);
-    if (result.success) showToast("Role & Permissions saved successfully!");
-    else showToast("Failed to save permissions: " + result.error, 'error');
+    if (result.success) {
+        showToast("Role & Permissions saved successfully!");
+        await refreshPermissions(); // Refresh context
+    } else {
+        showToast("Failed to save permissions: " + result.error, 'error');
+    }
   };
 
   const handleSaveUserConfig = async () => {
@@ -430,6 +448,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         return <UserManagement />;
 
       case 'user-configuration':
+        // ... (User Configuration Content)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
@@ -492,6 +511,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               {/* User Input Form Configuration */}
               {activeUserConfigTab === 'form' && (
                 <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
+                  {/* ... Existing form logic ... */}
                   <div className="flex items-center gap-2 mb-4">
                     <PenTool className="w-5 h-5 text-indigo-500" />
                     <h4 className="font-semibold text-gray-800 dark:text-gray-200">Configure User Input Form</h4>
@@ -576,7 +596,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         );
 
       case 'global-settings':
-        // ... (rest of the file remains unchanged)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
@@ -722,32 +741,32 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {['dashboard', 'admission', 'students', 'employees', 'users', 'settings'].map((module) => (
-                    <tr key={module} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white capitalize">
-                        {module.replace('-', ' ')}
+                  {permissionModules.map((module) => (
+                    <tr key={module.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                        {module.label}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center">
                           <ToggleSwitch 
-                            enabled={rolePermissions?.[activeRoleTab]?.[module]?.view || false} 
-                            onChange={() => handlePermissionToggle(activeRoleTab, module, 'view')} 
+                            enabled={rolePermissions?.[activeRoleTab]?.[module.id]?.view || false} 
+                            onChange={() => handlePermissionToggle(activeRoleTab, module.id, 'view')} 
                           />
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center">
                           <ToggleSwitch 
-                            enabled={rolePermissions?.[activeRoleTab]?.[module]?.edit || false} 
-                            onChange={() => handlePermissionToggle(activeRoleTab, module, 'edit')} 
+                            enabled={rolePermissions?.[activeRoleTab]?.[module.id]?.edit || false} 
+                            onChange={() => handlePermissionToggle(activeRoleTab, module.id, 'edit')} 
                           />
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center">
                           <ToggleSwitch 
-                            enabled={rolePermissions?.[activeRoleTab]?.[module]?.delete || false} 
-                            onChange={() => handlePermissionToggle(activeRoleTab, module, 'delete')} 
+                            enabled={rolePermissions?.[activeRoleTab]?.[module.id]?.delete || false} 
+                            onChange={() => handlePermissionToggle(activeRoleTab, module.id, 'delete')} 
                           />
                         </div>
                       </td>

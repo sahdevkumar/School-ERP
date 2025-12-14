@@ -111,12 +111,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const label = item.label.toLowerCase();
     const href = (item.href || '').toLowerCase();
 
+    // If item has children, it's a container.
+    // Logic: A container is visible if ANY of its children are visible.
+    // The `renderNavItem` function handles checking children permissions.
+    // So for the parent itself, we usually just want to know if it *can* contain visible items.
+    // However, if we return `true` here blindly for parents, we rely on the children check loop.
+    if (item.children && item.children.length > 0) {
+      return item.children.some(child => checkAccess(child));
+    }
+
     if (label === 'dashboard' || href === 'dashboard') module = 'dashboard';
     else if (label === 'students' || href === 'students') module = 'students';
     else if (label === 'employee' || href === 'employees' || href === 'teachers') module = 'employees';
+    else if (label === 'attendance' || href === 'attendance') module = 'attendance';
+    else if (label === 'fees' || href === 'fees') module = 'fees';
     else if (label === 'admission' || href.includes('admission') || href === 'registration' || href === 'admission-enquiry') module = 'admission';
-    else if (label === 'reception') module = 'admission'; // Parent container for reception
-    else if (label === 'settings' || href.includes('settings') || href.includes('config') || href === 'menu-layout' || href === 'role-permissions') module = 'settings';
+    else if (label === 'reception') module = 'admission';
+    else if (label === 'settings' || href.includes('settings') || href.includes('config') || href === 'menu-layout' || href === 'role-permissions' || href === 'add-department' || href === 'system-student-field') module = 'settings';
     else if (label === 'user management' || href === 'users' || href === 'settings-users') module = 'users';
     else if (label === 'activity control' || href === 'user-logs') module = 'activity';
     else if (label === 'recycle bin' || href === 'recycle-bin') module = 'recycle_bin';
@@ -124,11 +135,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // If mapped to a module, check 'view' permission
     if (module) {
       return can(module, 'view');
-    }
-
-    // If parent with children, show if at least one child is accessible
-    if (item.children && item.children.length > 0) {
-      return item.children.some(child => checkAccess(child));
     }
 
     // Default allow if no restriction found (e.g. custom external links)
@@ -178,7 +184,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
 
     // If it's a parent but all children are hidden, don't render
-    if (hasChildren && !hasVisibleChildren) return null;
+    // This is double-checked by hasVisibleChildren above, but if checkAccess passed for parent
+    // solely because of a child that was later filtered out (edge case), we hide it.
+    if (item.children && !hasVisibleChildren && !item.href) return null;
 
     return (
       <a 

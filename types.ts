@@ -46,6 +46,15 @@ export interface AttendanceRecord {
   [key: string]: any;
 }
 
+export interface StudentAttendance {
+  id?: number;
+  student_id: number;
+  date: string;
+  status: 'present' | 'absent' | 'late' | 'half_day';
+  remarks?: string;
+  created_at?: string;
+}
+
 export interface StudentDemographic {
   name: string;
   value: number;
@@ -201,11 +210,13 @@ export interface StudentRegistration {
 
 // Fee Types
 export interface FeeStructure {
-  id: number;
+  id?: number;
   name: string;
   description?: string;
   amount: number;
-  frequency: string;
+  frequency: string; // Monthly, Yearly, One-time
+  class_id?: string; // Optional: applies to specific class
+  created_at?: string;
 }
 
 export interface StudentFeeDue {
@@ -222,11 +233,11 @@ export interface StudentFeeDue {
 export interface FeePayment {
   id?: number;
   student_id: number;
-  due_id?: number | null;
+  fee_structure_id?: number; // Simplified linkage
   amount: number;
   payment_date: string;
-  payment_mode: 'cash' | 'upi' | 'account' | 'cheque';
-  transaction_details?: any;
+  payment_mode: 'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque';
+  transaction_details?: string;
   notes?: string;
   created_at?: string;
 }
