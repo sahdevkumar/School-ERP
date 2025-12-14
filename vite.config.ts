@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
       'process.env': env
     },
     build: {
+      outDir: 'build', // Explicitly output to 'build' for Vercel
       target: 'es2020',
       sourcemap: false,
       chunkSizeWarningLimit: 2000,
