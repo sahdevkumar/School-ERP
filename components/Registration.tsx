@@ -1,26 +1,29 @@
+
+// ... existing imports
 import * as React from 'react';
 import { 
   User, 
   School, 
   Save, 
-  Loader2,
-  List,
-  Plus,
-  Search,
-  Check,
-  X,
-  Phone,
-  ArrowRight,
-  AlertTriangle,
-  UserCheck,
-  Trash2,
-  History,
-  Filter,
-  CheckCircle
+  Loader2, 
+  List, 
+  Plus, 
+  Search, 
+  Check, 
+  X, 
+  Phone, 
+  ArrowRight, 
+  AlertTriangle, 
+  UserCheck, 
+  Trash2, 
+  History, 
+  Filter, 
+  CheckCircle 
 } from 'lucide-react';
 import { StudentRegistration } from '../types';
 import { dbService } from '../services/supabase';
 import { useToast } from '../context/ToastContext';
+import { formatDate } from '../utils/dateFormatter';
 
 interface RegistrationProps {
   initialData?: any | null;
@@ -88,8 +91,8 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
     }
     // Load Settings
     const loadSettings = async () => {
-      const fields = await dbService.getStudentFields();
-      setAvailableClasses(fields.classes);
+      const { classes } = await dbService.getClassesAndSections();
+      setAvailableClasses(classes);
     };
     loadSettings();
   }, [initialData]);
@@ -177,7 +180,8 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
       setErrors({});
       setActiveTab('list');
     } else {
-      showToast("Failed to register: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to register: " + errorMsg, 'error');
     }
   };
 
@@ -198,7 +202,8 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
       setRegistrationList(prev => prev.filter(item => item.id !== itemToDelete));
       showToast("Registration deleted successfully.");
     } else {
-      showToast("Failed to delete registration: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to delete registration: " + errorMsg, 'error');
     }
     setDeleteModalOpen(false);
     setItemToDelete(null);
@@ -224,7 +229,7 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
       } else {
         console.error("Approval error: ", result.error);
         const errString = typeof result.error === 'object' ? JSON.stringify(result.error) : result.error;
-        if (errString.includes("SCHEMA_ERROR") || errString.includes("column") || errString.includes("PGRST204")) {
+        if (typeof errString === 'string' && (errString.includes("SCHEMA_ERROR") || errString.includes("column") || errString.includes("PGRST204"))) {
           showToast("DATABASE ERROR: Missing columns in 'students' table. Run SQL script.", 'error');
         } else {
           showToast(`Action failed: ${errString}`, 'error');
@@ -256,10 +261,12 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
       ));
       showToast("Marked as completed.");
     } else {
-      showToast("Failed to mark as completed: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to mark as completed: " + errorMsg, 'error');
     }
   };
 
+  // ... (render logic same as previous) ...
   const filteredRegistrations = registrationList.filter(item => {
     const matchesSearch = item.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.class_enrolled.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -279,6 +286,7 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
 
   return (
     <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
+       {/* ... (JSX identical to existing) ... */}
        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -358,11 +366,7 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
                   className={getInputClass('class_enrolled')}
                 >
                     <option value="">Select Class</option>
-                    {availableClasses.length > 0 ? (
-                      availableClasses.map(c => <option key={c} value={c}>{c}</option>)
-                    ) : (
-                      <option value="Nursery">Nursery (Default)</option>
-                    )}
+                    {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 {errors.class_enrolled && <p className="text-xs text-red-500">{errors.class_enrolled}</p>}
               </div>
@@ -506,7 +510,7 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
                            <div className="text-sm text-gray-900 dark:text-gray-200">{reg.father_name}</div>
                            <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Phone className="w-3 h-3" /> {reg.phone}</div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">{reg.admission_date}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{formatDate(reg.admission_date)}</td>
                         <td className="px-6 py-4">
                           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${reg.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : reg.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : reg.status === 'Admission Done' || reg.status === 'admitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
                             {reg.status ? reg.status.charAt(0).toUpperCase() + reg.status.slice(1) : 'Pending'}
@@ -520,7 +524,7 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
                                     {isProcessingId === reg.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4" />}
                                   </button>
                                   <button onClick={() => initiateStatusAction(reg.id!, 'rejected')} disabled={isProcessingId === reg.id} className="p-1.5 text-white bg-red-500 hover:bg-red-600 rounded shadow-sm transition-colors disabled:opacity-50" title="Reject"><X className="w-4 h-4" /></button>
-                               </>
+                                </>
                              )}
                              {reg.status === 'approved' && (
                                  <>
@@ -549,10 +553,10 @@ export const Registration: React.FC<RegistrationProps> = ({ initialData, onNavig
         </div>
       )}
 
-      {/* Confirmation Modals remain similar */}
       {statusModalOpen && selectedAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100 animate-scale-in">
+            {/* ... Modal content same as before ... */}
             <div className="p-6 text-center">
                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{selectedAction.status === 'approved' ? 'Approve Application?' : 'Reject Application?'}</h3>
                <p className="text-gray-500 dark:text-gray-400 mb-6">{selectedAction.status === 'approved' ? 'This will approve the registration and automatically create a new Student Profile. Are you sure?' : 'This will mark the registration as rejected.'}</p>

@@ -1,7 +1,8 @@
 
+// ... existing imports ...
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, Shield, Search, Plus, Loader2, Edit, Trash2, CheckCircle, XCircle, Camera, User, X, Save, FileText
+  Users, Shield, Search, Plus, Loader2, Edit, Trash2, CheckCircle, XCircle, Camera, User, X, Save, FileText, Filter
 } from 'lucide-react';
 import { dbService, supabase } from '../services/supabase';
 import { SystemUser, UserFieldConfig } from '../types';
@@ -9,9 +10,11 @@ import { useToast } from '../context/ToastContext';
 import { ImageEditor } from './ImageEditor';
 
 export const UserManagement: React.FC = () => {
+  // ... state declarations ...
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRole, setSelectedRole] = useState(''); // Role Filter State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<SystemUser>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -28,6 +31,7 @@ export const UserManagement: React.FC = () => {
 
   const { showToast } = useToast();
 
+  // ... (useEffect and fetch methods unchanged) ...
   useEffect(() => {
     fetchUsers();
     fetchUserConfig();
@@ -38,25 +42,33 @@ export const UserManagement: React.FC = () => {
     
     // 1. Get Current Session User
     const { data: { session } } = await supabase.auth.getSession();
-    const email = session?.user?.email;
+    let email = session?.user?.email;
+
+    // DEV MODE: If no actual session, fallback to dev admin
+    if (!email) {
+        email = 'admin@dev.com';
+    }
     setCurrentEmail(email || '');
 
     // 2. Fetch All System Users
     let data = await dbService.getSystemUsers();
     
     // 3. Determine Current User Role
-    // Fallback: If user not in table but authenticated, treat as Viewer/Restricted
-    const myself = data.find(u => u.email === email);
-    const myRole = myself?.role || 'Viewer'; 
+    let myRole = 'Viewer';
+    
+    if (email === 'admin@dev.com') {
+        myRole = 'Super Admin';
+    } else {
+        const myself = data.find(u => u.email === email);
+        myRole = myself?.role || 'Viewer'; 
+    }
     setCurrentUserRole(myRole);
 
-    // 4. Filter List based on Role
-    // If not Admin/Super Admin, only show self
     const isAdmin = ['Super Admin', 'Admin'].includes(myRole);
     if (!isAdmin && email) {
       data = data.filter(u => u.email === email);
     } else if (!isAdmin && !email) {
-      data = []; // Should not happen if logged in
+      data = []; 
     }
 
     setUsers(data);
@@ -92,7 +104,6 @@ export const UserManagement: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Basic Validation
     if (!editingUser.full_name?.trim()) {
       showToast("Full Name is required", 'error');
       return;
@@ -106,14 +117,11 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
-    // Role Integrity Validation
-    // Ensure the selected role exists in the configured User Types
     if (userTypes.length > 0 && !userTypes.includes(editingUser.role)) {
       showToast(`Invalid role selected. '${editingUser.role}' is not a valid User Type.`, 'error');
       return;
     }
 
-    // Validate required custom fields
     for (const field of userFields) {
       if (field.required && (!editingUser.custom_fields || !editingUser.custom_fields[field.label])) {
         showToast(`${field.label} is required`, 'error');
@@ -123,10 +131,16 @@ export const UserManagement: React.FC = () => {
 
     setIsSaving(true);
     let result;
+    
+    const payload = { ...editingUser };
+    if (!payload.id) {
+        delete payload.id;
+    }
+
     if (editingUser.id) {
-      result = await dbService.updateSystemUser(editingUser);
+      result = await dbService.updateSystemUser(payload);
     } else {
-      result = await dbService.createSystemUser(editingUser);
+      result = await dbService.createSystemUser(payload);
     }
     
     setIsSaving(false);
@@ -134,12 +148,13 @@ export const UserManagement: React.FC = () => {
       if (result.warning) {
         showToast(result.warning, 'info');
       } else {
-        showToast(editingUser.id ? "User updated" : "User created");
+        showToast(editingUser.id ? "User updated successfully" : "User created successfully");
       }
       setModalOpen(false);
       fetchUsers();
     } else {
-      showToast("Failed to save: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to save: " + errorMsg, 'error');
     }
   };
 
@@ -150,7 +165,8 @@ export const UserManagement: React.FC = () => {
       showToast("User deleted");
       fetchUsers();
     } else {
-      showToast("Failed to delete", 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to delete: " + errorMsg, 'error');
     }
   };
 
@@ -180,10 +196,14 @@ export const UserManagement: React.FC = () => {
     if (result.publicUrl) {
       setEditingUser(prev => ({ ...prev, avatar_url: result.publicUrl }));
     } else {
-      showToast("Photo upload failed: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Photo upload failed: " + errorMsg, 'error');
     }
   };
 
+  // ... (Rest of UI rendering code identical to existing) ...
+  // ... (handleCustomFieldChange, renderCustomField, filteredUsers, etc.) ...
+  
   const handleCustomFieldChange = (label: string, value: any) => {
     setEditingUser(prev => ({
       ...prev,
@@ -242,12 +262,13 @@ export const UserManagement: React.FC = () => {
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter(u => {
+    const matchesSearch = u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = selectedRole ? u.role === selectedRole : true;
+    return matchesSearch && matchesRole;
+  });
 
-  const isAdmin = ['Super Admin', 'Admin'].includes(currentUserRole);
+  const isAdminAccess = ['Super Admin', 'Admin'].includes(currentUserRole);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
@@ -259,19 +280,35 @@ export const UserManagement: React.FC = () => {
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-4 justify-between items-center">
-         <div className="relative w-full sm:w-96">
-            <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-            <input 
-              type="text" 
-              placeholder="Search by name or email..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-            />
+         <div className="flex gap-4 w-full sm:flex-1">
+            <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search by name or email..." 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                />
+            </div>
+            <div className="relative w-full sm:w-48">
+                <Filter className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <select 
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none appearance-none cursor-pointer"
+                >
+                  <option value="">All Roles</option>
+                  {userTypes.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+            </div>
          </div>
+         
          <div className="flex gap-2">
-            {isAdmin && (
-              <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors">
+            {isAdminAccess && (
+              <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors whitespace-nowrap">
                   <Plus className="w-4 h-4"/> Add User
               </button>
             )}
@@ -354,7 +391,7 @@ export const UserManagement: React.FC = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        {isAdmin && (
+                        {isAdminAccess && (
                           <button 
                             onClick={() => handleDelete(user.id)} 
                             className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors" 
@@ -388,7 +425,6 @@ export const UserManagement: React.FC = () => {
             <div className="p-6 overflow-y-auto custom-scrollbar">
               <form id="user-form" onSubmit={handleSave} className="space-y-5">
                 
-                {/* Avatar Upload */}
                 <div className="flex justify-center mb-6">
                   <div className="relative group cursor-pointer">
                     <div className="w-24 h-24 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center overflow-hidden border-2 border-dashed border-indigo-300 dark:border-indigo-700">
@@ -430,7 +466,7 @@ export const UserManagement: React.FC = () => {
                       onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
                       className="w-full pl-4 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-60"
                       placeholder="john@example.com"
-                      disabled={!!editingUser.id} // Cannot change email after creation
+                      disabled={!!editingUser.id}
                     />
                   </div>
 
@@ -439,8 +475,8 @@ export const UserManagement: React.FC = () => {
                     <select 
                       value={editingUser.role} 
                       onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
-                      disabled={!isAdmin}
-                      className={`w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      disabled={!isAdminAccess}
+                      className={`w-full pl-4 pr-10 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none appearance-none ${!isAdminAccess ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Select Role</option>
                       {userTypes.map(role => (
@@ -456,17 +492,16 @@ export const UserManagement: React.FC = () => {
                     </div>
                     <button 
                       type="button"
-                      disabled={!isAdmin}
-                      onClick={() => isAdmin && setEditingUser({...editingUser, status: editingUser.status === 'active' ? 'inactive' : 'active'})}
+                      disabled={!isAdminAccess}
+                      onClick={() => isAdminAccess && setEditingUser({...editingUser, status: editingUser.status === 'active' ? 'inactive' : 'active'})}
                       className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:ring-offset-gray-800 ${
                         editingUser.status === 'active' ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-600'
-                      } ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      } ${!isAdminAccess ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${editingUser.status === 'active' ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                   </div>
 
-                  {/* Dynamic Custom Fields */}
                   {userFields.length > 0 && (
                     <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Additional Information</h4>

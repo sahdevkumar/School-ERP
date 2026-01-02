@@ -9,7 +9,7 @@ import { dbService, supabase } from './services/supabase';
 import { LoginPage } from './components/LoginPage';
 import { Loader2 } from 'lucide-react';
 
-// Lazy Load Components to optimize memory usage and bundle size
+// Lazy Load Components
 const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
 const StudentManagement = React.lazy(() => import('./components/StudentManagement').then(module => ({ default: module.StudentManagement })));
 const Employees = React.lazy(() => import('./components/Employees').then(module => ({ default: module.Employees })));
@@ -22,7 +22,9 @@ const DepartmentSettings = React.lazy(() => import('./components/DepartmentSetti
 const UserManagement = React.lazy(() => import('./components/UserManagement').then(module => ({ default: module.UserManagement })));
 const UserLogs = React.lazy(() => import('./components/UserLogs').then(module => ({ default: module.UserLogs })));
 const Fees = React.lazy(() => import('./components/Fees').then(module => ({ default: module.Fees })));
+const Payroll = React.lazy(() => import('./components/Payroll').then(module => ({ default: module.Payroll })));
 const Attendance = React.lazy(() => import('./components/Attendance').then(module => ({ default: module.Attendance })));
+const FinanceDiscounts = React.lazy(() => import('./components/FinanceDiscounts').then(module => ({ default: module.FinanceDiscounts })));
 
 export const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -32,69 +34,19 @@ export const App: React.FC = () => {
   const [pageData, setPageData] = useState<any>(null);
   
   // Auth State
-  // DEV MODE: Mock session enabled to bypass login
+  // DEV MODE: Mock session enabled
   const [session, setSession] = useState<any>({ user: { email: 'admin@dev.com' } });
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: 'Dev Admin',
-    role: 'Super Admin', // Full Access
+    role: 'Super Admin',
     avatarUrl: 'https://ui-avatars.com/api/?name=Dev+Admin&background=6366f1&color=fff',
     email: 'admin@dev.com'
   });
 
-  // Check Session on Mount
+  // Check Session (Mocked for dev)
   useEffect(() => {
-    // DEV MODE: Auth check disabled
     return;
-
-    /* Original Auth Logic (Enable this back for production)
-    let mounted = true;
-
-    const initSession = async () => {
-      try {
-        // 1. Race Supabase Auth Check against a 5s timeout
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Auth check timeout')), 5000)
-        );
-
-        const { data } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        
-        if (mounted) {
-          setSession(data?.session);
-          
-          // 2. If authenticated, try loading profile with a separate timeout
-          if (data?.session?.user?.email) {
-            const profilePromise = loadUserProfile(data.session.user.email);
-            const profileTimeout = new Promise((resolve) => setTimeout(resolve, 5000));
-            await Promise.race([profilePromise, profileTimeout]);
-          }
-        }
-      } catch (error) {
-        console.error("Session initialization error:", error);
-        if (mounted) setSession(null);
-      } finally {
-        if (mounted) setIsLoadingSession(false);
-      }
-    };
-
-    initSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (mounted) {
-        setSession(session);
-        if (session?.user?.email) {
-          loadUserProfile(session.user.email);
-        }
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-    */
   }, []);
 
   const loadUserProfile = async (email: string) => {
@@ -120,7 +72,6 @@ export const App: React.FC = () => {
     }
   };
 
-  // Core System: Load Title & Theme
   useEffect(() => {
     const initSystem = async () => {
       try {
@@ -205,8 +156,23 @@ export const App: React.FC = () => {
       case 'user-logs':
         return <UserLogs />;
 
+      // Finance Control Routes
       case 'fees':
-        return <Fees />;
+      case 'fee-collection':
+        return <Fees initialTab="collection" />;
+      case 'fee-management':
+      case 'fee-structure':
+        return <Fees initialTab="structure" />;
+      case 'discount-bonus':
+        return <FinanceDiscounts />;
+      
+      // Payroll Routes
+      case 'payroll':
+      case 'pay-salary': // For safety
+        return <Payroll initialTab="payment" />;
+      case 'payroll-management':
+      case 'salary-management': // For safety
+        return <Payroll initialTab="structure" />;
         
       case 'attendance':
         return <Attendance />;
@@ -250,7 +216,7 @@ export const App: React.FC = () => {
   if (!session) {
     return (
       <ToastProvider>
-        <LoginPage onLoginSuccess={() => { /* State updates via onAuthStateChange */ }} />
+        <LoginPage onLoginSuccess={() => { }} />
       </ToastProvider>
     );
   }

@@ -100,7 +100,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       showToast("Confirmation email resent!", 'success');
       setError("A new confirmation link has been sent to your email.");
     } else {
-      showToast("Failed to resend: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to resend: " + errorMsg, 'error');
     }
   };
 

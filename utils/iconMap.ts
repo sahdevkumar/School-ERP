@@ -1,3 +1,4 @@
+
 import {
   LucideIcon,
   LayoutDashboard,
@@ -24,7 +25,12 @@ import {
   PanelLeft,
   Circle,
   HelpCircle,
-  Menu
+  Menu,
+  DollarSign,
+  Banknote,
+  Briefcase,
+  CreditCard,
+  Percent
 } from 'lucide-react';
 
 export const iconMap: { [key: string]: LucideIcon } = {
@@ -52,6 +58,11 @@ export const iconMap: { [key: string]: LucideIcon } = {
   PanelLeft,
   Circle,
   Menu,
+  DollarSign,
+  Banknote,
+  Briefcase,
+  CreditCard,
+  Percent
 };
 
 export const iconList = Object.keys(iconMap).sort();

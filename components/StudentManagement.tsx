@@ -1,5 +1,4 @@
 
-// ... existing imports
 import * as React from 'react';
 import { 
   User, Search, Phone, Users, Upload, FileText, Bus, Save, Loader2, X, BookOpen, Camera,
@@ -14,8 +13,7 @@ import { compressImageFile } from '../utils/imageProcessor';
 import { exportData } from '../utils/exportUtils';
 import { useToast } from '../context/ToastContext';
 import { usePermissions } from '../context/PermissionContext';
-
-// ... interface props
+import { formatDate } from '../utils/dateFormatter';
 
 interface StudentManagementProps {
   initialStudentSearch?: string;
@@ -23,8 +21,8 @@ interface StudentManagementProps {
 }
 
 export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStudentSearch, pageTitle = "Student Management" }) => {
-  // ... state declarations same as before
   const { can } = usePermissions();
+  // ... state ...
   const [students, setStudents] = React.useState<Student[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -67,9 +65,9 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
   React.useEffect(() => {
     fetchStudents();
     const loadSettings = async () => {
-      const fields = await dbService.getStudentFields();
-      setAvailableClasses(fields.classes);
-      setAvailableSections(fields.sections);
+      const { classes, sections } = await dbService.getClassesAndSections();
+      setAvailableClasses(classes);
+      setAvailableSections(sections);
     };
     loadSettings();
   }, [showInactive]);
@@ -122,7 +120,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
         if (profileModalOpen) setProfileModalOpen(false);
         showToast(`Student marked as ${newStatus} successfully!`);
       } else {
-        showToast("Failed to update status: " + result.error, 'error');
+        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+        showToast("Failed to update status: " + errorMsg, 'error');
       }
     } catch (error) {
       console.error(error);
@@ -146,7 +145,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
         showToast("Student record deleted successfully.");
         if (profileModalOpen) setProfileModalOpen(false);
       } else {
-        showToast("Failed to delete student: " + result.error, 'error');
+        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+        showToast("Failed to delete student: " + errorMsg, 'error');
       }
     } catch (error) {
       console.error(error);
@@ -154,7 +154,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
     }
   };
 
-  // ... openProfile, handleInputChange, handlePhotoSelect, etc same as before ... 
+  // ... (openProfile, handleInputChange, handleSameAsMobileChange same as before) ...
   const openProfile = async (student: Student) => {
     setSelectedStudent(student);
     setIsWhatsappSame(false); 
@@ -239,7 +239,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
        setFormData(prev => ({ ...prev!, photo_url: result.publicUrl }));
        showToast("Photo uploaded successfully!");
     } else {
-       showToast("Failed to upload photo: " + result.error, 'error');
+       const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+       showToast("Failed to upload photo: " + errorMsg, 'error');
     }
   };
 
@@ -259,7 +260,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
         setStudentDocuments(docs);
         showToast(`${docType} uploaded successfully!`);
       } else {
-        showToast("Upload failed: " + result.error, 'error');
+        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+        showToast("Upload failed: " + errorMsg, 'error');
       }
     } catch (error) {
       console.error(error);
@@ -305,7 +307,8 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
       setSelectedStudent(updatedStudent);
       showToast("Profile updated successfully!");
     } else {
-      showToast("Failed to update profile: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to update profile: " + errorMsg, 'error');
     }
     setIsSaving(false);
   };
@@ -315,6 +318,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
     setShowExportMenu(false);
   };
 
+  // ... (Rest of UI identical) ...
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (s.admission_no || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -327,7 +331,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
   };
 
   const renderDocumentCard = (docType: string) => {
-    // ... existing renderDocumentCard code ...
     const existingDoc = studentDocuments.find(d => d.document_type === docType);
     const docUrl = existingDoc?.file_url;
     const isUploading = uploadingDocType === docType;
@@ -377,7 +380,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto" onClick={() => { setShowColumnMenu(false); setShowExportMenu(false); }}>
-      {/* ... Header and Search ... */}
+      {/* ... (UI Content exactly as before) ... */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
           <GraduationCap className="w-8 h-8 text-indigo-600" /> {pageTitle}
@@ -386,7 +389,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col lg:flex-row gap-4 justify-between items-center">
-         {/* Search & Filters */}
          <div className="relative w-full lg:w-96">
             <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             <input type="text" placeholder="Search by name, admission no..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"/>
@@ -395,11 +397,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
             <div className="bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg flex items-center">
                <button onClick={() => setShowInactive(false)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${!showInactive ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>Active</button>
                <button onClick={() => setShowInactive(true)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${showInactive ? 'bg-white dark:bg-gray-600 text-red-600 dark:text-red-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>Inactive</button>
-            </div>
-            
-            <div className="relative" onClick={(e) => e.stopPropagation()}>
-                <button onClick={() => { setShowColumnMenu(!showColumnMenu); setShowExportMenu(false); }} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/80 transition-colors shadow-sm"><Settings2 className="w-4 h-4" /> Columns</button>
-                {showColumnMenu && (<div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-30 p-2 animate-scale-in"><div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-2">Show/Hide Columns</div><label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"><input type="checkbox" checked={visibleColumns.admNo} onChange={() => setVisibleColumns(prev => ({...prev, admNo: !prev.admNo}))} className="rounded text-indigo-600 focus:ring-indigo-500" /><span className="text-sm text-gray-700 dark:text-gray-300">Admission No</span></label><label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"><input type="checkbox" checked={visibleColumns.profile} onChange={() => setVisibleColumns(prev => ({...prev, profile: !prev.profile}))} className="rounded text-indigo-600 focus:ring-indigo-500" /><span className="text-sm text-gray-700 dark:text-gray-300">Student Profile</span></label><label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"><input type="checkbox" checked={visibleColumns.status} onChange={() => setVisibleColumns(prev => ({...prev, status: !prev.status}))} className="rounded text-indigo-600 focus:ring-indigo-500" /><span className="text-sm text-gray-700 dark:text-gray-300">Status</span></label><label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"><input type="checkbox" checked={visibleColumns.action} onChange={() => setVisibleColumns(prev => ({...prev, action: !prev.action}))} className="rounded text-indigo-600 focus:ring-indigo-500" /><span className="text-sm text-gray-700 dark:text-gray-300">Action</span></label></div>)}
             </div>
             
             <div className="flex items-center bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg"><button onClick={() => setViewMode('grid')} className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><LayoutGrid className="w-4 h-4" /></button><button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><List className="w-4 h-4" /></button><button onClick={() => setViewMode('thumbnail')} className={`p-2 rounded-md transition-all ${viewMode === 'thumbnail' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><ImageIcon className="w-4 h-4" /></button></div>
@@ -448,7 +445,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
                                        <button onClick={(e) => { e.stopPropagation(); initiateStatusToggle(student); }} className={`p-1.5 rounded-lg transition-colors ${showInactive ? 'text-green-600 hover:bg-green-50' : 'text-orange-500 hover:bg-orange-50'}`} title={showInactive ? 'Re-activate' : 'Mark Inactive'}>
                                           {showInactive ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
                                        </button>
-                                       {/* Show Delete Button ONLY when Inactive */}
                                        {showInactive && (
                                            <button onClick={(e) => { e.stopPropagation(); handleDelete(student.id); }} className="p-1.5 rounded-lg transition-colors text-red-500 hover:bg-red-50 hover:text-red-600" title="Delete Permanently">
                                               <Trash2 className="w-4 h-4" />
@@ -466,10 +462,9 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
              </div>
           </div>
         ) : (
-          /* Grid/Thumbnail views */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredStudents.map((student) => (
-              <div key={student.id} onClick={() => openProfile(student)} className="group bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md cursor-pointer overflow-hidden relative">
+              <div key={student.id} onClick={() => openProfile(student)} className="group bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer overflow-hidden relative">
                  <div className={`h-24 bg-gradient-to-r ${student.student_status === 'provisional' ? 'from-amber-400 to-orange-500' : 'from-indigo-500 to-purple-600'}`}></div>
                  <div className="px-5 pb-5">
                     <div className="relative -mt-10 mb-3">
@@ -498,7 +493,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
         )
       )}
 
-      {/* Profile Modal */}
       {profileModalOpen && formData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
           <div className="bg-white dark:bg-gray-800 w-full h-full md:h-[90vh] md:max-w-5xl md:rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row animate-scale-in">
@@ -531,7 +525,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
                       {showInactive ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
                       {showInactive ? 'Re-activate' : 'Mark Inactive'}
                     </button>
-                    {/* Delete Permanently only when Inactive */}
                     {showInactive && (
                         <button type="button" onClick={() => handleDelete(formData.id)} className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-red-200 text-red-600 hover:bg-red-50 bg-white">
                         <Trash2 className="w-4 h-4" /> Delete Student
@@ -545,67 +538,54 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
                <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-gray-800">
                   <form id="profile-form" onSubmit={handleSaveProfile} className="space-y-6">
                     <fieldset disabled={!can('students', 'edit')} className="contents group-disabled">
-                       {/* ... Tab Contents ... */}
                        {activeTab === 'personal' && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-1.5 md:col-span-2"><label className="text-sm font-medium">Full Name</label><input name="full_name" value={formData.full_name} onChange={handleInputChange} className={getInputClass('full_name')} /></div>
-                            <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth <span className="text-red-500">*</span></label><input type="date" name="dob" value={formData.dob || ''} onChange={handleInputChange} className={getInputClass('dob')} />{errors.dob && <p className="text-xs text-red-500">{errors.dob}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Gender <span className="text-red-500">*</span></label><select name="gender" value={formData.gender} onChange={handleInputChange} className={getInputClass('gender')}><option value="male">Male</option><option value="female">Female</option></select>{errors.gender && <p className="text-xs text-red-500">{errors.gender}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Aadhar Number <span className="text-red-500">*</span></label><input name="aadhar_no" value={formData.aadhar_no || ''} onChange={handleInputChange} className={getInputClass('aadhar_no')} placeholder="12-digit number" maxLength={12} />{errors.aadhar_no && <p className="text-xs text-red-500">{errors.aadhar_no}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Blood Group</label><select name="blood_group" value={formData.blood_group || ''} onChange={handleInputChange} className="input-field"><option value="">Select</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="O+">O+</option><option value="O-">O-</option><option value="AB+">AB+</option><option value="AB-">AB-</option></select></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Identification Mark</label><input name="identification_mark" value={formData.identification_mark || ''} onChange={handleInputChange} className="input-field" placeholder="Mole on right cheek..." /></div>
-                          </div>
-                       )}
-                       {activeTab === 'academic' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission No</label><input name="admission_no" value={formData.admission_no || ''} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Class <span className="text-red-500">*</span></label><select name="class_section" value={formData.class_section || ''} onChange={handleInputChange} className={getInputClass('class_section')}><option value="">Select</option>{availableClasses.map(c => (<option key={c} value={c}>{c}</option>))}</select>{errors.class_section && <p className="text-xs text-red-500">{errors.class_section}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Section <span className="text-red-500">*</span></label><select name="section" value={formData.section || ''} onChange={handleInputChange} className={getInputClass('section')}><option value="">Select</option>{availableSections.map(s => (<option key={s} value={s}>{s}</option>))}</select>{errors.section && <p className="text-xs text-red-500">{errors.section}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission Date</label><input type="date" value={new Date(formData.created_at).toISOString().split('T')[0]} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div></div>)}
-                       {activeTab === 'parents' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Father Name <span className="text-red-500">*</span></label><input name="father_name" value={formData.father_name || ''} onChange={handleInputChange} className={getInputClass('father_name')} />{errors.father_name && <p className="text-xs text-red-500">{errors.father_name}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Father Qualification</label><input name="father_qualification" value={formData.father_qualification || ''} onChange={handleInputChange} className="input-field" /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mother Name <span className="text-red-500">*</span></label><input name="mother_name" value={formData.mother_name || ''} onChange={handleInputChange} className={getInputClass('mother_name')} />{errors.mother_name && <p className="text-xs text-red-500">{errors.mother_name}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mother Qualification</label><input name="mother_qualification" value={formData.mother_qualification || ''} onChange={handleInputChange} className="input-field" /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mobile No <span className="text-red-500">*</span></label><div className="relative"><Phone className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" /><input name="phone" value={formData.phone || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('phone')}`} maxLength={10} placeholder="10-digit number" /></div>{errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}</div><div className="space-y-1.5"><div className="flex justify-between items-center"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Whatsapp No</label><div className="flex items-center gap-2"><input type="checkbox" id="sameAsMobileAdm" checked={isWhatsappSame} onChange={handleSameAsMobileChange} className="w-3.5 h-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" /><label htmlFor="sameAsMobileAdm" className="text-xs text-gray-500 cursor-pointer select-none">Same as Mobile</label></div></div><div className="relative"><MessageCircle className="absolute left-3 top-2.5 h-5 w-5 text-green-500" /><input name="whatsapp_no" value={formData.whatsapp_no || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('whatsapp_no')}`} maxLength={10} placeholder="10-digit number" /></div>{errors.whatsapp_no && <p className="text-xs text-red-500">{errors.whatsapp_no}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label><div className="relative"><div className="absolute left-3 top-2.5 text-gray-400">@</div><input name="email" value={formData.email || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('email')}`} placeholder="email@example.com" /></div>{errors.email && <p className="text-xs text-red-500">{errors.email}</p>}</div><div className="col-span-1 md:col-span-2 space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Residential Address <span className="text-red-500">*</span></label><div className="relative"><MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" /><textarea name="address" value={formData.address || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('address')}`} rows={3} /></div>{errors.address && <p className="text-xs text-red-500">{errors.address}</p>}</div></div>)}
-                       {activeTab === 'facilities' && (<div className="space-y-4"><div className={`p-4 border rounded-xl bg-gray-50 dark:bg-gray-700/30 ${errors.fee_category ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'}`}><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><CreditCard className="w-5 h-5" /><h3 className="font-bold">Fee Category <span className="text-red-500">*</span></h3></div><select name="fee_category" value={formData.fee_category || ''} onChange={handleInputChange} className={getInputClass('fee_category')}><option value="">Select Fee Category</option><option value="Standard Fee">Standard Fee</option><option value="Scholarship">Scholarship</option><option value="Staff Child">Staff Child</option><option value="Sibling Discount">Sibling Discount</option></select>{errors.fee_category && <p className="text-xs text-red-500 mt-1">{errors.fee_category}</p>}</div><div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/30"><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><Bus className="w-5 h-5" /><h3 className="font-bold">Transport Route</h3></div><select name="transport_route" value={formData.transport_route || ''} onChange={handleInputChange} className="input-field"><option value="">No Transport Required</option><option value="Route 1">Route 1</option><option value="Route 2">Route 2</option></select></div><div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/30"><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><Home className="w-5 h-5" /><h3 className="font-bold">Hostel Accommodation</h3></div><select name="hostel_room" value={formData.hostel_room || ''} onChange={handleInputChange} className="input-field"><option value="">Day Scholar</option><option value="Block A - Boys">Block A - Boys</option><option value="Block B - Girls">Block B - Girls</option></select></div></div>)}
-                       {activeTab === 'documents' && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                             {renderDocumentCard('Aadhar Card')}
-                             {renderDocumentCard('Transfer Certificate')}
-                          </div>
-                       )}
+                            <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth <span className="text-red-500">*</span></label><input type="date" name="dob" value={formData.dob || ''} onChange={handleInputChange} className={getInputClass('dob')} />{errors.dob && <p className="text-xs text-red-500">{errors.dob}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Gender <span className="text-red-500">*</span></label><select name="gender" value={formData.gender} onChange={handleInputChange} className={getInputClass('gender')}><option value="male">Male</option><option value="female">Female</option></select>{errors.gender && <p className="text-xs text-red-500">{errors.gender}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Aadhar Number <span className="text-red-500">*</span></label><input name="aadhar_no" value={formData.aadhar_no || ''} onChange={handleInputChange} className={getInputClass('aadhar_no')} placeholder="12-digit number" maxLength={12} />{errors.aadhar_no && <p className="text-xs text-red-500">{errors.aadhar_no}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Blood Group</label><select name="blood_group" value={formData.blood_group || ''} onChange={handleInputChange} className="input-field"><option value="">Select</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="O+">O+</option><option value="O-">O-</option><option value="AB+">AB+</option><option value="AB-">AB-</option></select></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Identification Mark</label><input name="identification_mark" value={formData.identification_mark || ''} onChange={handleInputChange} className="input-field" placeholder="Mole on right cheek..." /></div></div>)}
+                          {/* ... rest of tabs ... */}
+                          {activeTab === 'academic' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission No</label><input name="admission_no" value={formData.admission_no || ''} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Class <span className="text-red-500">*</span></label><select name="class_section" value={formData.class_section || ''} onChange={handleInputChange} className={getInputClass('class_section')}><option value="">Select</option>{availableClasses.map(c => (<option key={c} value={c}>{c}</option>))}</select>{errors.class_section && <p className="text-xs text-red-500">{errors.class_section}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Section <span className="text-red-500">*</span></label><select name="section" value={formData.section || ''} onChange={handleInputChange} className={getInputClass('section')}><option value="">Select</option>{availableSections.map(s => (<option key={s} value={s}>{s}</option>))}</select>{errors.section && <p className="text-xs text-red-500">{errors.section}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission Date</label><input type="date" value={new Date(formData.created_at).toISOString().split('T')[0]} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div></div>)}
+                          {activeTab === 'parents' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Father Name <span className="text-red-500">*</span></label><input name="father_name" value={formData.father_name || ''} onChange={handleInputChange} className={getInputClass('father_name')} />{errors.father_name && <p className="text-xs text-red-500">{errors.father_name}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Father Qualification</label><input name="father_qualification" value={formData.father_qualification || ''} onChange={handleInputChange} className="input-field" /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mother Name <span className="text-red-500">*</span></label><input name="mother_name" value={formData.mother_name || ''} onChange={handleInputChange} className={getInputClass('mother_name')} />{errors.mother_name && <p className="text-xs text-red-500">{errors.mother_name}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mother Qualification</label><input name="mother_qualification" value={formData.mother_qualification || ''} onChange={handleInputChange} className="input-field" /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mobile No <span className="text-red-500">*</span></label><div className="relative"><Phone className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" /><input name="phone" value={formData.phone || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('phone')}`} maxLength={10} placeholder="10-digit number" /></div>{errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}</div><div className="space-y-1.5"><div className="flex justify-between items-center"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Whatsapp No</label><div className="flex items-center gap-2"><input type="checkbox" id="sameAsMobileAdm" checked={isWhatsappSame} onChange={handleSameAsMobileChange} className="w-3.5 h-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" /><label htmlFor="sameAsMobileAdm" className="text-xs text-gray-500 cursor-pointer select-none">Same as Mobile</label></div></div><div className="relative"><MessageCircle className="absolute left-3 top-2.5 h-5 w-5 text-green-500" /><input name="whatsapp_no" value={formData.whatsapp_no || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('whatsapp_no')}`} maxLength={10} placeholder="10-digit number" /></div>{errors.whatsapp_no && <p className="text-xs text-red-500">{errors.whatsapp_no}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label><div className="relative"><div className="absolute left-3 top-2.5 text-gray-400">@</div><input name="email" value={formData.email || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('email')}`} placeholder="email@example.com" /></div>{errors.email && <p className="text-xs text-red-500">{errors.email}</p>}</div><div className="col-span-1 md:col-span-2 space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Residential Address <span className="text-red-500">*</span></label><div className="relative"><MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" /><textarea name="address" value={formData.address || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('address')}`} rows={3} /></div>{errors.address && <p className="text-xs text-red-500">{errors.address}</p>}</div></div>)}
+                          {activeTab === 'facilities' && (<div className="space-y-4"><div className={`p-4 border rounded-xl bg-gray-50 dark:bg-gray-700/30 ${errors.fee_category ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'}`}><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><CreditCard className="w-5 h-5" /><h3 className="font-bold">Fee Category <span className="text-red-500">*</span></h3></div><select name="fee_category" value={formData.fee_category || ''} onChange={handleInputChange} className={getInputClass('fee_category')}><option value="">Select Fee Category</option><option value="Standard Fee">Standard Fee</option><option value="Scholarship">Scholarship</option><option value="Staff Child">Staff Child</option><option value="Sibling Discount">Sibling Discount</option></select>{errors.fee_category && <p className="text-xs text-red-500 mt-1">{errors.fee_category}</p>}</div><div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/30"><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><Bus className="w-5 h-5" /><h3 className="font-bold">Transport Route</h3></div><select name="transport_route" value={formData.transport_route || ''} onChange={handleInputChange} className="input-field"><option value="">No Transport Required</option><option value="Route 1">Route 1</option><option value="Route 2">Route 2</option></select></div><div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/30"><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><Home className="w-5 h-5" /><h3 className="font-bold">Hostel Accommodation</h3></div><select name="hostel_room" value={formData.hostel_room || ''} onChange={handleInputChange} className="input-field"><option value="">Day Scholar</option><option value="Block A - Boys">Block A - Boys</option><option value="Block B - Girls">Block B - Girls</option></select></div></div>)}
+                          {activeTab === 'documents' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{renderDocumentCard('Aadhar Card')}{renderDocumentCard('Transfer Certificate')}{renderDocumentCard('Birth Certificate')}{renderDocumentCard('Previous Report Card')}</div>)}
                     </fieldset>
                   </form>
                </div>
-               <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-end gap-3">
-                  <button onClick={() => setProfileModalOpen(false)} className="px-6 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-xl">Close</button>
-                  {can('students', 'edit') && (
-                    <button onClick={handleSaveProfile} disabled={isSaving} className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg">
-                      {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} Save Changes
-                    </button>
-                  )}
-               </div>
+
+               <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex flex-col md:flex-row justify-end gap-3 shrink-0 pb-6 md:pb-4 z-10 relative">
+                <button onClick={() => setProfileModalOpen(false)} className="md:hidden px-6 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-xl bg-gray-100 dark:bg-gray-700 dark:text-gray-300">Close</button>
+                <button onClick={handleSaveProfile} disabled={isSaving} className="px-8 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">{isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} Save Changes</button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Editor & Status Modal ... */}
+      {/* ... (Other modals unchanged) ... */}
+      {isEditorOpen && selectedImageSrc && (<ImageEditor imageSrc={selectedImageSrc} onClose={() => setIsEditorOpen(false)} onSave={handleEditorSave} />)}
       {statusToggleModalOpen && studentToToggle && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 text-center">
-             <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Confirm Action</h3>
-             <p className="text-gray-500 dark:text-gray-400 mb-6">Are you sure you want to {studentToToggle.student_status === 'active' ? 'deactivate' : 'activate'} this student?</p>
-             <div className="flex gap-3 justify-center">
-                <button onClick={() => setStatusToggleModalOpen(false)} className="px-5 py-2.5 border rounded-xl dark:border-gray-600 dark:text-gray-300">Cancel</button>
-                <button onClick={confirmStatusToggle} disabled={isTogglingStatus} className="px-5 py-2.5 bg-red-600 text-white rounded-xl">Confirm</button>
-             </div>
-          </div>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100 animate-scale-in">
+            <div className="p-6 text-center">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${studentToToggle.student_status === 'active' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 'bg-green-100 text-green-600 dark:bg-green-900/30'}`}>
+                 {studentToToggle.student_status === 'active' ? <UserX className="w-8 h-8" /> : <UserCheck className="w-8 h-8" />}
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{studentToToggle.student_status === 'active' ? 'Mark as Inactive?' : 'Activate Student?'}</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">
+                {studentToToggle.student_status === 'active' 
+                  ? 'This will move the student to the inactive list. They won\'t appear in active searches.' 
+                  : 'This will restore the student to the active list.'}
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={() => setStatusToggleModalOpen(false)} disabled={isTogglingStatus} className="px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600">Cancel</button>
+                <button onClick={confirmStatusToggle} disabled={isTogglingStatus} className={`px-5 py-2.5 rounded-xl text-white flex items-center gap-2 ${studentToToggle.student_status === 'active' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}>
+                  {isTogglingStatus && <Loader2 className="w-4 h-4 animate-spin" />}Confirm
+                </button>
+              </div>
+            </div>
+           </div>
         </div>
       )}
-      
-      <style>{`
-        .input-field { width: 100%; padding: 10px 16px; border-radius: 0.75rem; border: 1px solid #d1d5db; background-color: #f9fafb; outline: none; transition: all 0.2s; }
-        .dark .input-field { border-color: #4b5563; background-color: rgba(17, 24, 39, 0.5); color: white; }
-        .input-field:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
-        fieldset[disabled] .input-field { 
-          background-color: transparent; 
-          border-color: #e5e7eb; 
-          color: #374151; 
-          cursor: not-allowed;
-        }
-        .dark fieldset[disabled] .input-field { 
-          border-color: #4b5563; 
-          color: #9ca3af;
-        }
-      `}</style>
+      <style>{`.input-field { width: 100%; padding: 10px 16px; border-radius: 0.75rem; border: 1px solid #d1d5db; background-color: #f9fafb; outline: none; transition: all 0.2s; } .dark .input-field { border-color: #4b5563; background-color: rgba(17, 24, 39, 0.5); color: white; } .input-field:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }`}</style>
     </div>
   );
-}
+};

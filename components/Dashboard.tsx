@@ -1,7 +1,7 @@
 
 import * as React from 'react';
 import { StatCard } from './StatCard';
-import { Users, GraduationCap, CalendarCheck, DollarSign, RefreshCw, Database, CheckCircle2, AlertCircle, LayoutTemplate } from 'lucide-react';
+import { Users, GraduationCap, CalendarCheck, DollarSign, RefreshCw, Database, CheckCircle2, AlertCircle, LayoutTemplate, ArrowRight } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dbService } from '../services/supabase';
 import { DashboardStats, AttendanceRecord, StudentDemographic, Student, DashboardLayoutConfig } from '../types';
@@ -250,13 +250,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       {/* Recent Activity List */}
       {layout.recent_activity && (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">New Enrollments</h3>
-          <div className="space-y-4">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">New Enrollments</h3>
+            <button 
+              onClick={() => onNavigate?.('students')}
+              className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+            >
+              View All <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-3">
             {recentStudents.length > 0 ? (
               recentStudents.map((student, i) => (
-                <div key={student.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold overflow-hidden border border-indigo-200 dark:border-indigo-800">
+                <div key={student.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold overflow-hidden border border-indigo-200 dark:border-indigo-800 text-sm">
                       {student.photo_url ? (
                         <img src={student.photo_url} alt={student.full_name} className="w-full h-full object-cover" />
                       ) : (
@@ -264,13 +272,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                       )}
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
+                      <p className="font-semibold text-gray-900 dark:text-white text-sm">
                         {student.full_name}
                       </p>
-                      <p className="text-sm text-gray-500">Class: {student.class_section} • Gender: {student.gender}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                        <span className="bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded text-[10px]">{student.class_section}</span> 
+                        <span>•</span>
+                        <span className="capitalize">{student.gender}</span>
+                      </p>
                     </div>
                   </div>
-                  <span className="text-sm text-gray-400">
+                  <span className="text-xs text-gray-400 font-medium">
                     {new Date(student.created_at).toLocaleDateString()}
                   </span>
                 </div>

@@ -1,3 +1,4 @@
+
 import * as React from 'react';
 import { 
   Save, 
@@ -30,6 +31,7 @@ import {
 import { dbService } from '../services/supabase';
 import { AdmissionEnquiry as AdmissionEnquiryType, StudentRegistration } from '../types';
 import { useToast } from '../context/ToastContext';
+import { formatDate } from '../utils/dateFormatter';
 
 interface AdmissionEnquiryProps {
   onNavigate?: (page: string, data?: any) => void;
@@ -89,8 +91,8 @@ export const AdmissionEnquiry: React.FC<AdmissionEnquiryProps> = ({ onNavigate }
     }
     // Fetch classes settings
     const loadSettings = async () => {
-      const fields = await dbService.getStudentFields();
-      setAvailableClasses(fields.classes);
+      const { classes } = await dbService.getClassesAndSections();
+      setAvailableClasses(classes);
     };
     loadSettings();
   }, [activeTab]);
@@ -204,13 +206,20 @@ export const AdmissionEnquiry: React.FC<AdmissionEnquiryProps> = ({ onNavigate }
         const regResult = await dbService.createRegistration(newReg);
         if (!regResult.success) throw new Error(regResult.error);
 
+        // Update status AND mark as deleted to move out of the active list
         const updResult = await dbService.updateAdmissionEnquiry({
             ...currentMessageItem,
-            response_status: 'In Registration'
+            response_status: 'In Registration',
+            is_deleted: true 
         });
         if (!updResult.success) throw new Error(updResult.error);
 
+        // Update local list immediately to remove it from view
+        setEnquiryList(prev => prev.filter(item => item.id !== currentMessageItem.id));
+
         setMessageModalOpen(false);
+        showToast("Enquiry moved to Registration and archived.");
+
         if (onNavigate) {
           onNavigate('registration', { view: 'list' });
         }
@@ -446,11 +455,7 @@ export const AdmissionEnquiry: React.FC<AdmissionEnquiryProps> = ({ onNavigate }
                       className={getInputClass('class_applying_for')}
                      >
                       <option value="">Select Class</option>
-                      {availableClasses.length > 0 ? (
-                        availableClasses.map(c => <option key={c} value={c}>{c}</option>)
-                      ) : (
-                        <option value="Nursery">Nursery (Default)</option>
-                      )}
+                      {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-500">
                       <ChevronRight className="w-4 h-4 rotate-90" />
@@ -790,9 +795,9 @@ export const AdmissionEnquiry: React.FC<AdmissionEnquiryProps> = ({ onNavigate }
                         </td>
                         <td className="px-6 py-4">
                            <div className="text-xs text-gray-500">
-                            <span className="block mb-1">Enq: <span className="text-gray-700 dark:text-gray-300">{enquiry.enquiry_date}</span></span>
+                            <span className="block mb-1">Enq: <span className="text-gray-700 dark:text-gray-300">{formatDate(enquiry.enquiry_date)}</span></span>
                             {enquiry.next_follow_up && (
-                              <span className="block text-orange-600 dark:text-orange-400">Follow: {enquiry.next_follow_up}</span>
+                              <span className="block text-orange-600 dark:text-orange-400">Follow: {formatDate(enquiry.next_follow_up)}</span>
                             )}
                            </div>
                         </td>
@@ -988,7 +993,7 @@ export const AdmissionEnquiry: React.FC<AdmissionEnquiryProps> = ({ onNavigate }
             <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Enquiry Details</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">ID: #{previewItem.id} • {previewItem.enquiry_date}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">ID: #{previewItem.id} • {formatDate(previewItem.enquiry_date)}</p>
               </div>
               <button 
                 onClick={() => setPreviewModalOpen(false)}
@@ -1041,7 +1046,7 @@ export const AdmissionEnquiry: React.FC<AdmissionEnquiryProps> = ({ onNavigate }
                 </div>
                 <div className="space-y-1">
                   <span className="text-xs font-semibold uppercase text-gray-400 tracking-wider">Date of Birth</span>
-                  <p className="font-medium text-gray-900 dark:text-white">{previewItem.dob || 'N/A'}</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{formatDate(previewItem.dob)}</p>
                 </div>
                 <div className="space-y-1">
                   <span className="text-xs font-semibold uppercase text-gray-400 tracking-wider">Parent Name</span>

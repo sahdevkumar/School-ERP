@@ -1,4 +1,5 @@
 
+// ... existing imports
 import React, { useState, useEffect } from 'react';
 import { CalendarCheck, Save, Loader2, Search, Check, X, Clock } from 'lucide-react';
 import { dbService } from '../services/supabase';
@@ -16,12 +17,29 @@ export const Attendance: React.FC = () => {
   const { showToast } = useToast();
 
   useEffect(() => {
+    let mounted = true;
     const loadClasses = async () => {
+      // 1. Fetch configured classes from Settings
       const fields = await dbService.getStudentFields();
-      setClasses(fields.classes);
-      if(fields.classes.length > 0) setSelectedClass(fields.classes[0]);
+      let classList = fields.classes || [];
+
+      // 2. Fetch distinct classes from Students table (ensure dropdown isn't empty)
+      try {
+        const allStudents = await dbService.getAllStudentsRaw();
+        const existingClasses = [...new Set(allStudents.map(s => s.class_section).filter(Boolean))];
+        // Merge and sort
+        classList = [...new Set([...classList, ...existingClasses])].sort();
+      } catch (e) {
+        console.warn("Error fetching students for class list", e);
+      }
+
+      if (mounted) {
+        setClasses(classList);
+        if(classList.length > 0 && !selectedClass) setSelectedClass(classList[0]);
+      }
     };
     loadClasses();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -67,10 +85,12 @@ export const Attendance: React.FC = () => {
     if (result.success) {
       showToast("Attendance saved successfully!");
     } else {
-      showToast("Failed to save: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to save: " + errorMsg, 'error');
     }
   };
 
+  // ... (render method same as before) ...
   const stats = {
     total: students.length,
     present: Object.values(attendance).filter(s => s === 'present').length,
@@ -88,8 +108,8 @@ export const Attendance: React.FC = () => {
           <p className="text-gray-500 dark:text-gray-400">Mark daily attendance for students.</p>
         </div>
         <div className="flex gap-4">
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-          <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" />
+          <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="px-4 py-2 border rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 min-w-[150px]">
             <option value="">Select Class</option>
             {classes.map(c => <option key={c} value={c}>{c}</option>)}
           </select>

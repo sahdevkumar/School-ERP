@@ -1,12 +1,15 @@
+
 import * as React from 'react';
 import { Trash2, RotateCcw, AlertTriangle, Loader2, Search } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { AdmissionEnquiry } from '../types';
+import { useToast } from '../context/ToastContext';
 
 export const RecycleBin: React.FC = () => {
   const [deletedItems, setDeletedItems] = React.useState<AdmissionEnquiry[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
+  const { showToast } = useToast();
 
   const fetchDeletedItems = async () => {
     setIsLoading(true);
@@ -15,6 +18,7 @@ export const RecycleBin: React.FC = () => {
       setDeletedItems(data);
     } catch (error) {
       console.error(error);
+      showToast("Failed to fetch deleted items", 'error');
     } finally {
       setIsLoading(false);
     }
@@ -28,9 +32,10 @@ export const RecycleBin: React.FC = () => {
     const result = await dbService.restoreAdmissionEnquiry(id);
     if (result.success) {
       setDeletedItems(prev => prev.filter(item => item.id !== id));
-      alert("Item restored successfully!");
+      showToast("Item restored successfully!");
     } else {
-      alert("Failed to restore: " + result.error);
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to restore: " + errorMsg, 'error');
     }
   };
 
@@ -42,8 +47,10 @@ export const RecycleBin: React.FC = () => {
     const result = await dbService.permanentDeleteAdmissionEnquiry(id);
     if (result.success) {
       setDeletedItems(prev => prev.filter(item => item.id !== id));
+      showToast("Item permanently deleted");
     } else {
-      alert("Failed to delete: " + result.error);
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to delete: " + errorMsg, 'error');
     }
   };
 

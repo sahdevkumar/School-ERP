@@ -111,6 +111,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const [newClass, setNewClass] = useState('');
   const [newSection, setNewSection] = useState('');
   const [newSubject, setNewSubject] = useState('');
+  const [activeStudentFieldTab, setActiveStudentFieldTab] = useState<'classes' | 'sections' | 'subjects'>('classes');
 
   useEffect(() => {
     if (activePage === 'system-student-field') {
@@ -218,7 +219,8 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       if (publicUrl) {
         finalSettings.school_logo_url = publicUrl;
       } else {
-        showToast("Logo upload failed: " + error, 'error');
+        const errorMsg = typeof error === 'string' ? error : JSON.stringify(error);
+        showToast("Logo upload failed: " + errorMsg, 'error');
         setIsSaving(false);
         return;
       }
@@ -231,7 +233,8 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       showToast("Settings saved successfully!");
       setLogoFile(null); // Reset file state
     } else {
-      showToast("Failed to save settings: " + result.error, 'error');
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to save settings: " + errorMsg, 'error');
     }
   };
 
@@ -240,7 +243,10 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     const result = await dbService.saveStudentFields(studentFields);
     setIsSaving(false);
     if (result.success) showToast("Student fields configuration saved!");
-    else showToast("Failed to save: " + result.error, 'error');
+    else {
+      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+      showToast("Failed to save: " + errorMsg, 'error');
+    }
   };
 
   const handleSaveLayout = async () => {
@@ -265,7 +271,8 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     if (result?.success) {
       showToast(`${type} layout updated successfully!`);
     } else {
-      showToast(`Failed to save ${type} layout: ${result?.error}`, 'error');
+      const errorMsg = typeof result?.error === 'string' ? result.error : JSON.stringify(result?.error);
+      showToast(`Failed to save ${type} layout: ${errorMsg}`, 'error');
     }
   };
 
@@ -278,7 +285,8 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         showToast("Role & Permissions saved successfully!");
         await refreshPermissions(); // Refresh context
     } else {
-        showToast("Failed to save permissions: " + result.error, 'error');
+        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+        showToast("Failed to save permissions: " + errorMsg, 'error');
     }
   };
 
@@ -294,7 +302,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
             const schemaResult = await dbService.ensureCustomFieldsSchema();
             if (!schemaResult.success) {
                 // Warning only - doesn't stop flow
-                if (schemaResult.error.includes("function") && schemaResult.error.includes("does not exist")) {
+                if (schemaResult.error && schemaResult.error.includes("function") && schemaResult.error.includes("does not exist")) {
                     showToast("Note: Auto-schema update failed. SQL setup required.", 'info');
                 }
             } else {
@@ -304,11 +312,13 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
             console.warn("Schema sync error", e);
         }
     } else {
-        showToast("Failed to save: " + result.error, 'error');
+        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+        showToast("Failed to save: " + errorMsg, 'error');
     }
     setIsSaving(false);
   };
 
+  // ... (rest of the component remains similar, helper functions etc.) ...
   const handleAddField = (type: 'classes' | 'sections' | 'subjects') => {
     let value = '';
     if (type === 'classes') value = newClass;
@@ -443,6 +453,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
 
 
   const renderContent = () => {
+    // ... (same as existing) ...
     switch (activePage) {
       case 'settings-users':
         return <UserManagement />;
@@ -451,6 +462,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         // ... (User Configuration Content)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
+            {/* ... (Header and Tabs same as before) ... */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><UserCog className="w-5 h-5" /></div>
@@ -511,7 +523,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               {/* User Input Form Configuration */}
               {activeUserConfigTab === 'form' && (
                 <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-                  {/* ... Existing form logic ... */}
                   <div className="flex items-center gap-2 mb-4">
                     <PenTool className="w-5 h-5 text-indigo-500" />
                     <h4 className="font-semibold text-gray-800 dark:text-gray-200">Configure User Input Form</h4>
@@ -598,6 +609,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'global-settings':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            {/* ... Global Settings Content ... */}
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
               <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><Globe className="w-5 h-5" /></div>
               <div>
@@ -606,6 +618,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* ... Inputs ... */}
               <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">System Name</label>
                 <input name="system_name" value={settings.system_name || ''} onChange={handleInputChange} className="input-field" />
@@ -648,6 +661,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'school-settings':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+             {/* ... School Settings Content ... */}
              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><School className="w-5 h-5" /></div>
                 <div>
@@ -708,6 +722,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'role-permissions':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
+            {/* ... Role Permissions Content ... */}
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
               <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><Shield className="w-5 h-5" /></div>
               <div>
@@ -789,6 +804,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'menu-layout':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            {/* ... Layout Configuration Content ... */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><LayoutTemplate className="w-5 h-5" /></div>
@@ -906,99 +922,131 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         );
       
       case 'system-student-field':
-        // ... (rest of the file remains unchanged)
         return (
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
-              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><BookOpen className="w-5 h-5" /></div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">System Student Fields</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Manage dynamic options for classes, sections, and subjects.</p>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
+            {/* ... Student Fields Content ... */}
+            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><BookOpen className="w-5 h-5" /></div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">System Student Fields</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Manage dynamic options for classes, sections, and subjects.</p>
+                </div>
+              </div>
+              <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg overflow-x-auto">
+                <button
+                  onClick={() => setActiveStudentFieldTab('classes')}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'classes' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                  <Layout className="w-4 h-4" /> Classes
+                </button>
+                <button
+                  onClick={() => setActiveStudentFieldTab('sections')}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'sections' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                  <Layers className="w-4 h-4" /> Sections
+                </button>
+                <button
+                  onClick={() => setActiveStudentFieldTab('subjects')}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'subjects' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                  <BookOpen className="w-4 h-4" /> Subjects
+                </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Classes Card */}
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <div className="flex items-center gap-2 mb-3">
-                  <Layout className="w-5 h-5 text-indigo-500" />
-                  <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Classes</h4>
-                </div>
-                <div className="flex gap-2 mb-3">
-                  <input
-                    value={newClass}
-                    onChange={(e) => setNewClass(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddField('classes')}
-                    placeholder="Add new class..."
-                    className="input-field flex-1"
-                  />
-                  <button onClick={() => handleAddField('classes')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                  {studentFields.classes.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
-                      <button onClick={() => handleRemoveField('classes', index)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Sections Card */}
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <div className="flex items-center gap-2 mb-3">
-                  <Layers className="w-5 h-5 text-indigo-500" />
-                  <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Sections</h4>
-                </div>
-                <div className="flex gap-2 mb-3">
-                  <input
-                    value={newSection}
-                    onChange={(e) => setNewSection(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddField('sections')}
-                    placeholder="Add new section..."
-                    className="input-field flex-1"
-                  />
-                  <button onClick={() => handleAddField('sections')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                  {studentFields.sections.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
-                      <button onClick={() => handleRemoveField('sections', index)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {/* Content Area */}
+            <div className="mt-4 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
+                {activeStudentFieldTab === 'classes' && (
+                    <>
+                        <div className="flex items-center gap-2 mb-4">
+                            <Layout className="w-5 h-5 text-indigo-500" />
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Classes</h4>
+                        </div>
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                value={newClass}
+                                onChange={(e) => setNewClass(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddField('classes')}
+                                placeholder="Add new class (e.g. Class 10)..."
+                                className="input-field flex-1"
+                            />
+                            <button onClick={() => handleAddField('classes')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {studentFields.classes.map((item, index) => (
+                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
+                                    <button onClick={() => handleRemoveField('classes', index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
+                                </div>
+                            ))}
+                            {studentFields.classes.length === 0 && <span className="text-sm text-gray-500 italic">No classes added.</span>}
+                        </div>
+                    </>
+                )}
 
-              {/* Subjects Card */}
-              <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                <div className="flex items-center gap-2 mb-3">
-                  <BookOpen className="w-5 h-5 text-indigo-500" />
-                  <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Subjects</h4>
-                </div>
-                <div className="flex gap-2 mb-3">
-                  <input
-                    value={newSubject}
-                    onChange={(e) => setNewSubject(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddField('subjects')}
-                    placeholder="Add new subject..."
-                    className="input-field flex-1"
-                  />
-                  <button onClick={() => handleAddField('subjects')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                </div>
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                  {studentFields.subjects.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{item}</span>
-                      <button onClick={() => handleRemoveField('subjects', index)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                {activeStudentFieldTab === 'sections' && (
+                    <>
+                        <div className="flex items-center gap-2 mb-4">
+                            <Layers className="w-5 h-5 text-indigo-500" />
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Sections</h4>
+                        </div>
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                value={newSection}
+                                onChange={(e) => setNewSection(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddField('sections')}
+                                placeholder="Add new section (e.g. A, B)..."
+                                className="input-field flex-1"
+                            />
+                            <button onClick={() => handleAddField('sections')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {studentFields.sections.map((item, index) => (
+                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
+                                    <button onClick={() => handleRemoveField('sections', index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
+                                </div>
+                            ))}
+                            {studentFields.sections.length === 0 && <span className="text-sm text-gray-500 italic">No sections added.</span>}
+                        </div>
+                    </>
+                )}
+
+                {activeStudentFieldTab === 'subjects' && (
+                    <>
+                        <div className="flex items-center gap-2 mb-4">
+                            <BookOpen className="w-5 h-5 text-indigo-500" />
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Subjects</h4>
+                        </div>
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                value={newSubject}
+                                onChange={(e) => setNewSubject(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddField('subjects')}
+                                placeholder="Add new subject (e.g. Math, English)..."
+                                className="input-field flex-1"
+                            />
+                            <button onClick={() => handleAddField('subjects')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {studentFields.subjects.map((item, index) => (
+                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
+                                    <button onClick={() => handleRemoveField('subjects', index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
+                                </div>
+                            ))}
+                            {studentFields.subjects.length === 0 && <span className="text-sm text-gray-500 italic">No subjects added.</span>}
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className="flex justify-end mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-               <button onClick={handleSaveFields} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20"><Save className="w-5 h-5" />Save Fields</button>
+               <button onClick={handleSaveFields} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  Save Fields
+               </button>
             </div>
           </div>
         );

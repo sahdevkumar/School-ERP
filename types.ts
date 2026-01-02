@@ -95,7 +95,7 @@ export interface Employee { // Renamed from Teacher
   joining_date?: string;
   photo_url?: string;
   status?: 'active' | 'inactive';
-  created_at: string;
+  created_at?: string; // Made optional as it might be missing in some DB views
   // Bank Details
   bank_name?: string;
   bank_account_no?: string;
@@ -147,6 +147,7 @@ export interface Student {
   class_section?: string;
   section?: string;      
   admission_no?: string;
+  previous_school?: string;
   
   // Profile Fields
   photo_url?: string;
@@ -216,6 +217,16 @@ export interface FeeStructure {
   amount: number;
   frequency: string; // Monthly, Yearly, One-time
   class_id?: string; // Optional: applies to specific class
+  created_at?: string;
+}
+
+export interface Discount {
+  id?: number;
+  name: string;
+  type: 'percentage' | 'flat';
+  value: number;
+  category: 'student' | 'employee'; // Student = Fee Discount, Employee = Salary Bonus
+  description?: string;
   created_at?: string;
 }
 

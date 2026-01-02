@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, Trash2, Search, DollarSign, Calendar, Save, Loader2, CheckCircle, FileText } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Search, DollarSign, Calendar, Save, Loader2, CheckCircle, FileText, Tag } from 'lucide-react';
 import { dbService } from '../services/supabase';
-import { FeeStructure, Student, FeePayment } from '../types';
+import { FeeStructure, Student, FeePayment, Discount } from '../types';
 import { useToast } from '../context/ToastContext';
 
 export const Fees: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'structure' | 'collection'>('collection');
   const [fees, setFees] = useState<FeeStructure[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [discounts, setDiscounts] = useState<Discount[]>([]); // New state
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -20,6 +21,7 @@ export const Fees: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Bank Transfer'>('Cash');
   const [selectedFeeType, setSelectedFeeType] = useState<number | null>(null);
+  const [selectedDiscountId, setSelectedDiscountId] = useState<string>(""); // New state
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { showToast } = useToast();
@@ -30,13 +32,30 @@ export const Fees: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [feeData, studentData] = await Promise.all([
+    const [feeData, studentData, discountData] = await Promise.all([
       dbService.getFeeStructures(),
-      dbService.getAllStudents()
+      dbService.getAllStudents(),
+      dbService.getDiscounts()
     ]);
     setFees(feeData);
     setStudents(studentData);
+    setDiscounts(discountData.filter(d => d.category === 'student'));
     setLoading(false);
+  };
+
+  const calculateTotal = (feeId: number | null, discountId: string) => {
+    const fee = fees.find(f => f.id === feeId);
+    let amount = fee ? fee.amount : 0;
+    
+    const discount = discounts.find(d => d.id?.toString() === discountId);
+    if (discount && amount > 0) {
+        if (discount.type === 'percentage') {
+            amount = amount - (amount * (discount.value / 100));
+        } else {
+            amount = amount - discount.value;
+        }
+    }
+    setPaymentAmount(Math.max(0, Math.round(amount)));
   };
 
   const handleAddFee = async () => {
@@ -50,7 +69,7 @@ export const Fees: React.FC = () => {
       setNewFee({ name: '', amount: 0, frequency: 'Monthly', class_id: '' });
       fetchData();
     } else {
-      showToast("Failed to add: " + result.error, 'error');
+      showToast("Failed to add: " + (typeof result.error === 'string' ? result.error : JSON.stringify(result.error)), 'error');
     }
   };
 
@@ -61,7 +80,7 @@ export const Fees: React.FC = () => {
       setFees(prev => prev.filter(f => f.id !== id));
       showToast("Fee deleted");
     } else {
-      showToast("Failed to delete", 'error');
+      showToast("Failed to delete: " + (typeof result.error === 'string' ? result.error : JSON.stringify(result.error)), 'error');
     }
   };
 
@@ -74,13 +93,21 @@ export const Fees: React.FC = () => {
   const handleCollectFee = async () => {
     if (!selectedStudent || !paymentAmount) return;
     setIsProcessing(true);
+    
+    // Add discount info to notes if applied
+    let notes = "Manual Collection";
+    if (selectedDiscountId) {
+        const d = discounts.find(disc => disc.id?.toString() === selectedDiscountId);
+        if (d) notes += ` (Discount Applied: ${d.name} - ${d.type === 'percentage' ? d.value + '%' : '$' + d.value})`;
+    }
+
     const payment: Partial<FeePayment> = {
       student_id: selectedStudent.id,
       fee_structure_id: selectedFeeType || undefined,
       amount: paymentAmount,
       payment_date: new Date().toISOString().split('T')[0],
       payment_mode: paymentMode,
-      notes: "Manual Collection"
+      notes: notes
     };
     
     const result = await dbService.createFeePayment(payment);
@@ -90,8 +117,10 @@ export const Fees: React.FC = () => {
       showToast("Payment recorded successfully!");
       setSelectedStudent(null);
       setPaymentAmount(0);
+      setSelectedFeeType(null);
+      setSelectedDiscountId("");
     } else {
-      showToast("Payment failed: " + result.error, 'error');
+      showToast("Payment failed: " + (typeof result.error === 'string' ? result.error : JSON.stringify(result.error)), 'error');
     }
   };
 
@@ -169,7 +198,12 @@ export const Fees: React.FC = () => {
               {filteredStudents.map(student => (
                 <div 
                   key={student.id} 
-                  onClick={() => setSelectedStudent(student)}
+                  onClick={() => {
+                      setSelectedStudent(student);
+                      setPaymentAmount(0);
+                      setSelectedFeeType(null);
+                      setSelectedDiscountId("");
+                  }}
                   className={`p-3 rounded-lg cursor-pointer border transition-colors flex items-center gap-3 ${selectedStudent?.id === student.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                 >
                   <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold text-sm">
@@ -201,33 +235,57 @@ export const Fees: React.FC = () => {
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Fee Type</label>
                     <select 
                       className="input-field w-full"
+                      value={selectedFeeType || ''}
                       onChange={(e) => {
-                        const fee = fees.find(f => f.id === Number(e.target.value));
-                        setSelectedFeeType(fee?.id || null);
-                        if(fee) setPaymentAmount(fee.amount);
+                        const val = e.target.value ? Number(e.target.value) : null;
+                        setSelectedFeeType(val);
+                        calculateTotal(val, selectedDiscountId);
                       }}
                     >
-                      <option value="">Select Fee (Optional)</option>
+                      <option value="">Select Fee</option>
                       {fees.map(f => <option key={f.id} value={f.id}>{f.name} - ${f.amount}</option>)}
                     </select>
                   </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                       <Tag className="w-4 h-4 text-indigo-500" /> Apply Discount
+                    </label>
+                    <select 
+                      className="input-field w-full"
+                      value={selectedDiscountId}
+                      onChange={(e) => {
+                        setSelectedDiscountId(e.target.value);
+                        calculateTotal(selectedFeeType, e.target.value);
+                      }}
+                    >
+                      <option value="">No Discount</option>
+                      {discounts.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.type === 'percentage' ? `${d.value}%` : `$${d.value}`})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Date</label>
                     <input type="date" defaultValue={new Date().toISOString().split('T')[0]} className="input-field w-full" />
                   </div>
+                  
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount Paid ($)</label>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount to Pay ($)</label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
                       <input 
                         type="number" 
                         value={paymentAmount} 
                         onChange={e => setPaymentAmount(Number(e.target.value))}
-                        className="input-field w-full pl-10" 
+                        className="input-field w-full pl-10 font-bold text-gray-900 dark:text-white" 
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Mode</label>
                     <select 
                       value={paymentMode} 
