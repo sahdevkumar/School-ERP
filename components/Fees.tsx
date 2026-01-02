@@ -5,8 +5,12 @@ import { dbService } from '../services/supabase';
 import { FeeStructure, Student, FeePayment, Discount } from '../types';
 import { useToast } from '../context/ToastContext';
 
-export const Fees: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'structure' | 'collection'>('collection');
+interface FeesProps {
+  initialTab?: 'structure' | 'collection';
+}
+
+export const Fees: React.FC<FeesProps> = ({ initialTab = 'collection' }) => {
+  const [activeTab, setActiveTab] = useState<'structure' | 'collection'>(initialTab);
   const [fees, setFees] = useState<FeeStructure[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [discounts, setDiscounts] = useState<Discount[]>([]); // New state
@@ -25,6 +29,10 @@ export const Fees: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { showToast } = useToast();
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     fetchData();

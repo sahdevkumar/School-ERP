@@ -1,3 +1,4 @@
+
 {
   "name": "edusphere-admin",
   "private": true,
@@ -5,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS='--max-old-space-size=400' vite build",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
     "preview": "vite preview"
   },
   "dependencies": {
