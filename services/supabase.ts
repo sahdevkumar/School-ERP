@@ -1,12 +1,22 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { 
   Student, Employee, AdmissionEnquiry, StudentRegistration, 
   SystemUser, UserLog, DashboardStats, AttendanceRecord, 
   StudentDemographic, DashboardLayoutConfig, NavItem, 
-  AdminPanelConfig, SystemPermissions, UserProfile,
+  AdminPanelConfig, SystemPermissions, RolePermissions, SystemPermissions as SystemPermissionsType, UserProfile,
   StudentDocument, EmployeeDocument, FeeStructure, FeePayment, StudentAttendance, EmployeeSalaryPayment,
   Discount
 } from '../types';
+
+// New interface for the requested structure
+export interface SalaryConfigEntry {
+  id: string;
+  employee_type: string;
+  designation: string;
+  level: string;
+  amount: number;
+}
 
 // Initialize Supabase with environment variables
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || 'https://vslbpndyjbmlwggnrjze.supabase.co';
@@ -34,7 +44,8 @@ const ALLOWED_EMPLOYEE_FIELDS = [
   'id', 'full_name', 'phone', 'email', 'address', 'dob', 'gender', 
   'qualification', 'joining_date', 'photo_url', 'status', 
   'bank_name', 'bank_account_no', 'bank_ifsc_code', 'bank_branch_name', 
-  'upi_id', 'account_holder_name'
+  'upi_id', 'account_holder_name', 'salary_amount', 'subject', 'department',
+  'employee_type', 'level'
 ];
 
 function sanitizeEmployee(emp: any) {
@@ -231,10 +242,10 @@ export class DBService {
             icon: 'DollarSign', 
             children: [
               { label: 'Fee Collection', icon: 'CreditCard', href: 'fee-collection' },
-              { label: 'Pay Salary', icon: 'Banknote', href: 'payroll' },
+              { label: 'Pay Salary', icon: 'Banknote', href: 'pay-salary' },
               { label: 'Fee Management', icon: 'Settings', href: 'fee-management' },
-              { label: 'Salary Management', icon: 'Briefcase', href: 'payroll-management' },
-              { label: 'Discount & Bonus', icon: 'Percent', href: 'discount-bonus' }
+              { label: 'Salary Management', icon: 'Settings', href: 'salary-management' },
+              { label: 'Discount & Bonus', icon: 'Percent', href: 'discount-and-bonus' }
             ]
           },
           { 
@@ -251,7 +262,7 @@ export class DBService {
             children: [
               { label: 'General Settings', icon: 'Globe', href: 'global-settings' },
               { label: 'School Info', icon: 'School', href: 'school-settings' },
-              { label: 'Departments', icon: 'Layers', href: 'add-department' },
+              // Removed standalone 'Employees Configuration'
               { label: 'User Config', icon: 'UserCog', href: 'user-configuration' },
               { label: 'Student Fields', icon: 'BookOpen', href: 'system-student-field' },
               { label: 'Role Permissions', icon: 'Shield', href: 'role-permissions' },
@@ -262,7 +273,7 @@ export class DBService {
           { label: 'Recycle Bin', icon: 'Trash2', href: 'recycle-bin' },
       ];
       
-      const savedMenu = await this.getSettingByKey<NavItem[]>('config_menu_layout', defaultMenu);
+      let savedMenu = await this.getSettingByKey<NavItem[]>('config_menu_layout', defaultMenu);
       return savedMenu || defaultMenu;
   }
 
@@ -279,7 +290,6 @@ export class DBService {
   // --- Employees ---
   async getEmployees(): Promise<Employee[]> { 
     try {
-      // Order by ID since created_at does not exist in the table schema provided
       const { data, error } = await supabase.from('employees').select('*').order('id', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -291,7 +301,6 @@ export class DBService {
 
   async addEmployee(emp: Employee) {
     try {
-      // Sanitize payload to match exact DB schema
       const safePayload = sanitizeEmployee(emp);
       const { error } = await supabase.from('employees').insert([safePayload]);
       if (error) return { success: false, error: error.message };
@@ -303,7 +312,6 @@ export class DBService {
 
   async updateEmployee(emp: Employee) { 
     try {
-      // Sanitize payload to match exact DB schema
       const safePayload = sanitizeEmployee(emp);
       const { error } = await supabase.from('employees').update(safePayload).eq('id', emp.id);
       if (error) return { success: false, error: error.message };
@@ -341,6 +349,39 @@ export class DBService {
     } catch {
       return [];
     }
+  }
+
+  // --- Salary Configuration By Designation (Refactored for Array) ---
+  async getSalaryConfigs(): Promise<SalaryConfigEntry[]> {
+      return this.getSettingByKey<SalaryConfigEntry[]>('payroll_salary_configs_v2', []);
+  }
+
+  async saveSalaryConfigs(configs: SalaryConfigEntry[]) {
+      return this.saveSettingByKey('payroll_salary_configs_v2', configs);
+  }
+
+  // Backward compatibility wrapper (optional)
+  async getDesignationSalaries(): Promise<Record<string, number>> {
+      return this.getSettingByKey<Record<string, number>>('payroll_designation_salaries', {});
+  }
+
+  async syncDesignationSalaries(designation: string, amount: number, type?: string, level?: string) {
+      try {
+          let query = supabase
+            .from('employees')
+            .update({ salary_amount: amount })
+            .eq('subject', designation)
+            .eq('status', 'active');
+          
+          if (type) query = query.eq('employee_type', type);
+          if (level) query = query.eq('level', level);
+
+          const { error } = await query;
+          if (error) throw error;
+          return { success: true };
+      } catch (e: any) {
+          return { success: false, error: e.message };
+      }
   }
 
   // --- Fees ---
@@ -518,8 +559,11 @@ export class DBService {
     return {
       classes: await this.getSettingByKey<string[]>('field_classes', ['Class 1', 'Class 2']),
       sections: await this.getSettingByKey<string[]>('field_sections', ['A', 'B']),
-      subjects: await this.getSettingByKey<string[]>('field_subjects', ['Math', 'Science'])
+      subjects: await this.getStudentFieldsSubjects()
     };
+  }
+  private async getStudentFieldsSubjects() {
+      return this.getSettingByKey<string[]>('field_subjects', ['Math', 'Science']);
   }
   async saveStudentFields(fields: any) {
     try {
@@ -643,13 +687,24 @@ export class DBService {
     } catch (e: any) { return { success: false, error: e.message }; }
   }
 
-  // --- Departments & Designations ---
-  async getDepartments() { return this.getSettingByKey<string[]>('org_departments', ['Science', 'Arts', 'Commerce']); }
-  async getDesignations() { return this.getSettingByKey<string[]>('org_designations', ['Teacher', 'Admin', 'Staff']); }
-  async saveDepartments(depts: string[]) { return this.saveSettingByKey('org_departments', depts); }
-  async saveDesignations(desigs: string[]) { return this.saveSettingByKey('org_designations', desigs); }
+  // --- Departments & Designations (Reverted to JSON Settings) ---
+  async getDepartments() {
+    return this.getSettingByKey<string[]>('config_departments', []);
+  }
 
-  // --- User Management ---
+  async saveDepartments(depts: string[]) {
+    return this.saveSettingByKey('config_departments', depts);
+  }
+
+  async getDesignations() {
+    return this.getSettingByKey<string[]>('config_designations', []);
+  }
+
+  async saveDesignations(desigs: string[]) {
+    return this.saveSettingByKey('config_designations', desigs);
+  }
+
+  // --- User Management (Reverted to JSON Settings for Config) ---
   async getSystemUsers(): Promise<SystemUser[]> {
     try {
       const { data } = await supabase.from('system_users').select('*');
@@ -677,19 +732,44 @@ export class DBService {
       return { success: true };
     } catch (e: any) { return { success: false, error: e.message }; }
   }
+  
   async getUserConfiguration() {
-    return {
-        userTypes: await this.getSettingByKey<string[]>('config_user_types', ['Super Admin', 'Admin', 'Editor', 'Viewer']),
-        userFields: await this.getSettingByKey<any[]>('config_user_fields', [])
-    };
+    try {
+      // Roles from Settings
+      const userTypes = await this.getSettingByKey<string[]>('config_user_roles', []);
+      // Fields from Settings
+      const userFields = await this.getSettingByKey<any[]>('config_user_fields', []);
+
+      if (userTypes.length === 0) {
+         return {
+           userTypes: ['Super Admin', 'Admin', 'Editor', 'Viewer'],
+           userFields
+         };
+      }
+
+      return {
+        userTypes,
+        userFields
+      };
+    } catch (e) {
+      return { userTypes: [], userFields: [] };
+    }
   }
+
   async saveUserConfiguration(config: any) {
     try {
-        await this.saveSettingByKey('config_user_types', config.userTypes);
+      if (config.userTypes) {
+        await this.saveSettingByKey('config_user_roles', config.userTypes);
+      }
+      if (config.userFields) {
         await this.saveSettingByKey('config_user_fields', config.userFields);
-        return { success: true };
-    } catch (e: any) { return { success: false, error: e.message }; }
+      }
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
   }
+
   async ensureCustomFieldsSchema(): Promise<{ success: boolean; error?: string }> { return { success: true }; }
   async getUserLogs(): Promise<UserLog[]> {
     try {

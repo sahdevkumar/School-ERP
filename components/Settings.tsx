@@ -29,7 +29,8 @@ import {
   X, 
   UserCog, 
   PenTool, 
-  Users 
+  Users,
+  Briefcase // Added Briefcase
 } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { useToast } from '../context/ToastContext';
@@ -87,8 +88,13 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   // User Config State
   const [userConfig, setUserConfig] = useState<{ userTypes: string[]; userFields: UserFieldConfig[] }>({ userTypes: [], userFields: [] });
   const [newUserType, setNewUserType] = useState('');
-  const [newField, setNewField] = useState<Partial<UserFieldConfig>>({ label: '', type: 'text', required: false });
-  const [activeUserConfigTab, setActiveUserConfigTab] = useState<'types' | 'form'>('types');
+  const [activeUserConfigTab, setActiveUserConfigTab] = useState<'types' | 'designations' | 'departments'>('types');
+
+  // Employee Config State (Moved here)
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [designations, setDesignations] = useState<string[]>([]);
+  const [newDept, setNewDept] = useState('');
+  const [newDesig, setNewDesig] = useState('');
 
   const [activeLayoutTab, setActiveLayoutTab] = useState<'dashboard' | 'admin' | 'menu'>('dashboard');
   const [activeRoleTab, setActiveRoleTab] = useState<string>('Admin');
@@ -170,9 +176,21 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
 
   const fetchUserConfig = async () => {
     setIsLoading(true);
-    const data = await dbService.getUserConfiguration();
-    setUserConfig(data);
-    setIsLoading(false);
+    try {
+        const [config, depts, desigs] = await Promise.all([
+            dbService.getUserConfiguration(),
+            dbService.getDepartments(),
+            dbService.getDesignations()
+        ]);
+        setUserConfig(config);
+        setDepartments(depts || []);
+        setDesignations(desigs || []);
+    } catch (e) {
+        console.error(e);
+        showToast("Failed to load configuration", "error");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -292,28 +310,27 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
 
   const handleSaveUserConfig = async () => {
     setIsSaving(true);
-    // 1. Save Config
-    const result = await dbService.saveUserConfiguration(userConfig);
     
-    if (result.success) {
-        showToast("User configuration saved!");
-        // 2. Attempt to Sync Schema (Auto Add Column)
+    // Save all three configurations
+    const [resConfig, resDept, resDesig] = await Promise.all([
+        dbService.saveUserConfiguration(userConfig),
+        dbService.saveDepartments(departments),
+        dbService.saveDesignations(designations)
+    ]);
+    
+    if (resConfig.success && resDept.success && resDesig.success) {
+        showToast("User and Organization configuration saved!");
+        // Attempt Schema Sync
         try {
             const schemaResult = await dbService.ensureCustomFieldsSchema();
-            if (!schemaResult.success) {
-                // Warning only - doesn't stop flow
-                if (schemaResult.error && schemaResult.error.includes("function") && schemaResult.error.includes("does not exist")) {
-                    showToast("Note: Auto-schema update failed. SQL setup required.", 'info');
-                }
-            } else {
-                showToast("Database schema synchronized.");
+            if (!schemaResult.success && schemaResult.error && schemaResult.error.includes("function") && schemaResult.error.includes("does not exist")) {
+                showToast("Note: Auto-schema update failed. SQL setup required.", 'info');
             }
         } catch (e) {
             console.warn("Schema sync error", e);
         }
     } else {
-        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
-        showToast("Failed to save: " + errorMsg, 'error');
+        showToast("Failed to save some configurations", 'error');
     }
     setIsSaving(false);
   };
@@ -349,24 +366,26 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setUserConfig(prev => ({ ...prev, userTypes: prev.userTypes.filter((_, i) => i !== index) }));
   };
 
-  const addUserField = () => {
-    if (!newField.label) {
-      showToast("Label is required", "error");
-      return;
-    }
-    const field: UserFieldConfig = {
-      id: Date.now().toString(),
-      label: newField.label,
-      type: newField.type || 'text',
-      required: newField.required || false,
-      options: newField.options
-    };
-    setUserConfig(prev => ({ ...prev, userFields: [...prev.userFields, field] }));
-    setNewField({ label: '', type: 'text', required: false, options: '' });
+  const addDepartment = () => {
+    if (!newDept.trim()) return;
+    if (departments.includes(newDept.trim())) { showToast('Department exists', 'error'); return; }
+    setDepartments([...departments, newDept.trim()]);
+    setNewDept('');
   };
 
-  const removeUserField = (id: string) => {
-    setUserConfig(prev => ({ ...prev, userFields: prev.userFields.filter(f => f.id !== id) }));
+  const removeDepartment = (index: number) => {
+    setDepartments(departments.filter((_, i) => i !== index));
+  };
+
+  const addDesignation = () => {
+    if (!newDesig.trim()) return;
+    if (designations.includes(newDesig.trim())) { showToast('Designation exists', 'error'); return; }
+    setDesignations([...designations, newDesig.trim()]);
+    setNewDesig('');
+  };
+
+  const removeDesignation = (index: number) => {
+    setDesignations(designations.filter((_, i) => i !== index));
   };
 
   // Menu Layout Handlers
@@ -462,16 +481,16 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
         // ... (User Configuration Content)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
-            {/* ... (Header and Tabs same as before) ... */}
+            {/* ... (Header and Tabs) ... */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><UserCog className="w-5 h-5" /></div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">User Configuration</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Manage user types and custom form fields.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Manage user types, roles, and organizational structure.</p>
                 </div>
               </div>
-              <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg overflow-x-auto">
                 <button 
                   onClick={() => setActiveUserConfigTab('types')} 
                   className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'types' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
@@ -479,10 +498,16 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                   <Users className="w-4 h-4" /> User Types
                 </button>
                 <button 
-                  onClick={() => setActiveUserConfigTab('form')} 
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'form' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                  onClick={() => setActiveUserConfigTab('designations')} 
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'designations' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
                 >
-                  <PenTool className="w-4 h-4" /> Input Form
+                  <Briefcase className="w-4 h-4" /> Designations
+                </button>
+                <button 
+                  onClick={() => setActiveUserConfigTab('departments')} 
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'departments' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+                >
+                  <Layers className="w-4 h-4" /> Departments
                 </button>
               </div>
             </div>
@@ -493,14 +518,14 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                 <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
                   <div className="flex items-center gap-2 mb-4">
                     <Users className="w-5 h-5 text-indigo-500" />
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage User Types</h4>
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage User Types (Roles)</h4>
                   </div>
                   <div className="flex gap-2 mb-4">
                     <input
                       value={newUserType}
                       onChange={(e) => setNewUserType(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && addUserType()}
-                      placeholder="Add new user type (e.g., Driver, Staff)..."
+                      placeholder="Add new role (e.g., Driver, Staff)..."
                       className="input-field flex-1"
                     />
                     <button onClick={addUserType} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
@@ -520,78 +545,60 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                 </div>
               )}
 
-              {/* User Input Form Configuration */}
-              {activeUserConfigTab === 'form' && (
+              {/* Designations Section */}
+              {activeUserConfigTab === 'designations' && (
                 <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
                   <div className="flex items-center gap-2 mb-4">
-                    <PenTool className="w-5 h-5 text-indigo-500" />
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Configure User Input Form</h4>
+                    <Briefcase className="w-5 h-5 text-indigo-500" />
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Employee Designations</h4>
                   </div>
-                  
-                  {/* Add Field Form */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-                    <div className="md:col-span-1">
-                      <label className="text-xs font-medium text-gray-500 mb-1 block">Label</label>
-                      <input 
-                        value={newField.label} 
-                        onChange={e => setNewField({...newField, label: e.target.value})} 
-                        placeholder="Field Label" 
-                        className="input-field w-full"
-                      />
-                    </div>
-                    <div className="md:col-span-1">
-                      <label className="text-xs font-medium text-gray-500 mb-1 block">Type</label>
-                      <select 
-                        value={newField.type} 
-                        onChange={e => setNewField({...newField, type: e.target.value as any})}
-                        className="input-field w-full"
-                      >
-                        <option value="text">Text</option>
-                        <option value="number">Number</option>
-                        <option value="email">Email</option>
-                        <option value="date">Date</option>
-                        <option value="select">Select Dropdown</option>
-                        <option value="textarea">Text Area</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-1">
-                       <label className="text-xs font-medium text-gray-500 mb-1 block">Options (for Select)</label>
-                       <input 
-                        value={newField.options || ''} 
-                        onChange={e => setNewField({...newField, options: e.target.value})} 
-                        placeholder="Comma separated" 
-                        disabled={newField.type !== 'select'}
-                        className="input-field w-full disabled:opacity-50"
-                      />
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={newField.required} 
-                          onChange={e => setNewField({...newField, required: e.target.checked})}
-                          className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                        />
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Required</span>
-                      </label>
-                      <button onClick={addUserField} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium">Add Field</button>
-                    </div>
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      value={newDesig}
+                      onChange={(e) => setNewDesig(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addDesignation()}
+                      placeholder="Add designation (e.g., Senior Teacher)..."
+                      className="input-field flex-1"
+                    />
+                    <button onClick={addDesignation} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
                   </div>
-
-                  {/* Field List */}
-                  <div className="space-y-2">
-                    {userConfig.userFields.map((field) => (
-                      <div key={field.id} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg">
-                        <div className="flex items-center gap-4">
-                          <span className="font-medium text-gray-800 dark:text-white">{field.label}</span>
-                          <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase">{field.type}</span>
-                          {field.required && <span className="text-xs text-red-500 font-medium">* Required</span>}
-                          {field.options && <span className="text-xs text-gray-500 truncate max-w-[200px]">Options: {field.options}</span>}
-                        </div>
-                        <button onClick={() => removeUserField(field.id)} className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"><Trash2 className="w-4 h-4" /></button>
+                  <div className="flex flex-wrap gap-2">
+                    {designations.map((item, index) => (
+                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
+                        <button onClick={() => removeDesignation(index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
                       </div>
                     ))}
-                    {userConfig.userFields.length === 0 && <div className="text-center text-gray-500 py-4 italic">No custom fields configured.</div>}
+                    {designations.length === 0 && <span className="text-sm text-gray-500 italic">No designations added.</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Departments Section */}
+              {activeUserConfigTab === 'departments' && (
+                <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Layers className="w-5 h-5 text-indigo-500" />
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Departments</h4>
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <input
+                      value={newDept}
+                      onChange={(e) => setNewDept(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addDepartment()}
+                      placeholder="Add department (e.g., Science, IT)..."
+                      className="input-field flex-1"
+                    />
+                    <button onClick={addDepartment} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {departments.map((item, index) => (
+                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
+                        <button onClick={() => removeDepartment(index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
+                      </div>
+                    ))}
+                    {departments.length === 0 && <span className="text-sm text-gray-500 italic">No departments added.</span>}
                   </div>
                 </div>
               )}

@@ -1,10 +1,10 @@
 
-// ... existing imports ...
+// ... imports
 import * as React from 'react';
 import { 
   User, Search, Phone, Users, Upload, FileText, Briefcase, Save, Loader2, X, 
   Camera, CheckCircle, Plus, Banknote, Eye, Trash2, Mail, MapPin, Calendar, Layers, UserX, UserCheck,
-  LayoutGrid, List, Image as ImageIcon, Settings2, Download, FileSpreadsheet, File as FileIcon, Table as TableIcon, Edit
+  LayoutGrid, List, Image as ImageIcon, Settings2, Download, FileSpreadsheet, File as FileIcon, Table as TableIcon, Edit, ExternalLink, BookOpen
 } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { Employee, EmployeeDocument } from '../types';
@@ -16,9 +16,10 @@ import { formatDate } from '../utils/dateFormatter';
 
 interface EmployeesProps {
   initialAction?: 'add';
+  onNavigate?: (page: string) => void;
 }
 
-export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
+export const Employees: React.FC<EmployeesProps> = ({ initialAction, onNavigate }) => {
   const { can } = usePermissions();
   // ... state ...
   const [employees, setEmployees] = React.useState<Employee[]>([]);
@@ -32,6 +33,7 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
     empId: true,
     profile: true,
     designation: true,
+    subject: true, // Added Subject column
     contact: true,
     joining: true,
     status: true,
@@ -98,7 +100,7 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
   };
 
   const openProfile = async (employee: Employee | null) => {
-    setFormData(employee || { status: 'active', gender: 'male' }); 
+    setFormData(employee || { status: 'active', gender: 'male', custom_fields: {} }); 
     setPhotoPreview(employee?.photo_url || null);
     setSelectedImageSrc(null);
     
@@ -125,11 +127,20 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
     }
   };
 
+  const handleCustomFieldChange = (key: string, value: string) => {
+    setFormData(prev => ({
+        ...prev,
+        custom_fields: {
+            ...(prev.custom_fields || {}),
+            [key]: value
+        }
+    }));
+  };
+
   const validateForm = () => {
       const newErrors: Record<string, string> = {};
       if (!formData.full_name?.trim()) newErrors.full_name = "Full Name is required";
       if (!formData.phone?.trim()) newErrors.phone = "Phone is required";
-      // Removed subject validation requirement as it might not be in DB, though UI still allows it.
       
       setErrors(newErrors);
       return Object.keys(newErrors).length === 0;
@@ -261,7 +272,6 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
   };
 
   const renderDocumentCard = (docType: string) => {
-      // ... (render logic same as previous) ...
       const existingDoc = employeeDocuments.find(d => d.document_type === docType);
       const docUrl = existingDoc?.file_url;
       const isUploading = uploadingDocType === docType;
@@ -293,9 +303,15 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
       );
   };
 
+  // Updated logic to include 'Academic' check
+  const isAcademicStaff = React.useMemo(() => {
+    const designation = (formData.subject || '').toLowerCase();
+    return designation.includes('teacher') || designation.includes('academic');
+  }, [formData.subject]);
+
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto" onClick={() => { setShowColumnMenu(false); setShowExportMenu(false); }}>
-      {/* ... (JSX identical to existing) ... */}
+      {/* ... Header ... */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
           <Briefcase className="w-8 h-8 text-indigo-600" /> Employee Management
@@ -316,6 +332,17 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
 
             <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => { setShowColumnMenu(!showColumnMenu); setShowExportMenu(false); }} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600/80 transition-colors shadow-sm"><Settings2 className="w-4 h-4" /> Columns</button>
+                {showColumnMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-30 p-2 animate-scale-in">
+                    <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-2">Show/Hide Columns</div>
+                    {Object.keys(visibleColumns).map(col => (
+                      <label key={col} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
+                        <input type="checkbox" checked={(visibleColumns as any)[col]} onChange={() => setVisibleColumns(prev => ({...prev, [col]: !(prev as any)[col]}))} className="rounded text-indigo-600 focus:ring-indigo-500" />
+                        <span className="text-sm text-gray-700 dark:text-gray-300 capitalize">{col.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
             </div>
 
             <div className="flex items-center bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
@@ -344,6 +371,7 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
                          {visibleColumns.empId && <th className="px-6 py-4 w-24">ID</th>}
                          {visibleColumns.profile && <th className="px-6 py-4">Employee Profile</th>}
                          {visibleColumns.designation && <th className="px-6 py-4">Designation</th>}
+                         {visibleColumns.subject && <th className="px-6 py-4">Subject</th>}
                          {visibleColumns.contact && <th className="px-6 py-4">Contact</th>}
                          {visibleColumns.joining && <th className="px-6 py-4">Joined</th>}
                          {visibleColumns.status && <th className="px-6 py-4">Status</th>}
@@ -371,6 +399,11 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
                               <td className="px-6 py-4 align-top">
                                 <div className="text-sm text-gray-900 dark:text-gray-200">{employee.subject || 'Staff'}</div>
                                 {employee.department && <div className="text-xs text-gray-500">{employee.department}</div>}
+                              </td>
+                            )}
+                            {visibleColumns.subject && (
+                              <td className="px-6 py-4 align-top text-sm text-gray-600 dark:text-gray-300">
+                                {employee.custom_fields?.teaching_subject || '-'}
                               </td>
                             )}
                             {visibleColumns.contact && (
@@ -433,6 +466,9 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
                  </div>
                  {viewMode !== 'thumbnail' && (
                    <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
+                      {employee.custom_fields?.teaching_subject && (
+                        <div className="flex items-center gap-2"><BookOpen className="w-3.5 h-3.5" /> {employee.custom_fields.teaching_subject}</div>
+                      )}
                       <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5" /> {employee.phone || 'N/A'}</div>
                       <div className="flex items-center gap-2 truncate"><Mail className="w-3.5 h-3.5" /> {employee.email || 'N/A'}</div>
                    </div>
@@ -505,8 +541,39 @@ export const Employees: React.FC<EmployeesProps> = ({ initialAction }) => {
                        )}
                        {activeTab === 'professional' && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-                             <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Designation</label><select name="subject" value={formData.subject || ''} onChange={handleInputChange} className={getInputClass('subject')}><option value="">Select Designation</option>{designations.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                             <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Department</label><select name="department" value={formData.department || ''} onChange={handleInputChange} className={getInputClass('department')}><option value="">Select Department</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                             <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Designation</label>
+                                  {/* Quick Link to Config */}
+                                  <a href="#" onClick={(e) => { e.preventDefault(); if (onNavigate) onNavigate('user-configuration'); }} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-1"><Settings2 className="w-3 h-3"/> Manage</a>
+                                </div>
+                                <select name="subject" value={formData.subject || ''} onChange={handleInputChange} className={getInputClass('subject')}><option value="">Select Designation</option>{designations.map(d => <option key={d} value={d}>{d}</option>)}</select>
+                             </div>
+                             
+                             {/* Conditional Subject Input for Teachers or Academic Staff */}
+                             {isAcademicStaff && (
+                                <div className="space-y-1.5">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Teaching Subject</label>
+                                    <div className="relative">
+                                        <BookOpen className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                        <input 
+                                            value={formData.custom_fields?.teaching_subject || ''}
+                                            onChange={(e) => handleCustomFieldChange('teaching_subject', e.target.value)}
+                                            className={getInputClass('teaching_subject', '!pl-10')}
+                                            placeholder="e.g. Mathematics"
+                                        />
+                                    </div>
+                                </div>
+                             )}
+
+                             <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                                  {/* Quick Link to Config */}
+                                  <a href="#" onClick={(e) => { e.preventDefault(); if (onNavigate) onNavigate('user-configuration'); }} className="text-xs text-indigo-500 hover:text-indigo-700 flex items-center gap-1"><Settings2 className="w-3 h-3"/> Manage</a>
+                                </div>
+                                <select name="department" value={formData.department || ''} onChange={handleInputChange} className={getInputClass('department')}><option value="">Select Department</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select>
+                             </div>
                              <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Joining Date</label><div className="relative"><Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><input type="date" name="joining_date" value={formData.joining_date || ''} onChange={handleInputChange} className={getInputClass('joining_date', '!pl-10')} /></div></div>
                           </div>
                        )}

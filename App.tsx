@@ -18,7 +18,6 @@ const AdmissionEnquiry = React.lazy(() => import('./components/AdmissionEnquiry'
 const Registration = React.lazy(() => import('./components/Registration').then(module => ({ default: module.Registration })));
 const RecycleBin = React.lazy(() => import('./components/RecycleBin').then(module => ({ default: module.RecycleBin })));
 const Admission = React.lazy(() => import('./components/Admission').then(module => ({ default: module.Admission })));
-const DepartmentSettings = React.lazy(() => import('./components/DepartmentSettings').then(module => ({ default: module.DepartmentSettings })));
 const UserManagement = React.lazy(() => import('./components/UserManagement').then(module => ({ default: module.UserManagement })));
 const UserLogs = React.lazy(() => import('./components/UserLogs').then(module => ({ default: module.UserLogs })));
 const Fees = React.lazy(() => import('./components/Fees').then(module => ({ default: module.Fees })));
@@ -34,7 +33,6 @@ export const App: React.FC = () => {
   const [pageData, setPageData] = useState<any>(null);
   
   // Auth State
-  // DEV MODE: Mock session enabled
   const [session, setSession] = useState<any>({ user: { email: 'admin@dev.com' } });
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -43,51 +41,6 @@ export const App: React.FC = () => {
     avatarUrl: 'https://ui-avatars.com/api/?name=Dev+Admin&background=6366f1&color=fff',
     email: 'admin@dev.com'
   });
-
-  // Check Session (Mocked for dev)
-  useEffect(() => {
-    return;
-  }, []);
-
-  const loadUserProfile = async (email: string) => {
-    try {
-      const profile = await dbService.getCurrentUserProfile(email);
-      if (profile) {
-        setUserProfile({
-          name: profile.full_name,
-          role: profile.role,
-          email: profile.email,
-          avatarUrl: profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.full_name)}&background=6366f1&color=fff`
-        });
-      } else {
-        setUserProfile({
-          name: email.split('@')[0],
-          role: 'Viewer',
-          email: email,
-          avatarUrl: `https://ui-avatars.com/api/?name=${email}&background=random`
-        });
-      }
-    } catch (e) {
-      console.warn("Failed to load user profile", e);
-    }
-  };
-
-  useEffect(() => {
-    const initSystem = async () => {
-      try {
-        const settingsPromise = dbService.getSystemSettings();
-        const timeout = new Promise((_, reject) => setTimeout(() => reject('timeout'), 3000));
-        const settings: any = await Promise.race([settingsPromise, timeout]);
-        
-        if (settings && (settings.system_title || settings.school_name)) {
-          document.title = `${settings.system_title || settings.school_name} | Admin Panel`;
-        }
-      } catch (e) {
-        console.warn("Failed to load system settings for title");
-      }
-    };
-    initSystem();
-  }, []);
 
   useEffect(() => {
     if (isDark) {
@@ -141,14 +94,10 @@ export const App: React.FC = () => {
       case 'employees':
       case 'teachers':
       case 'employee-list':
-        return <Employees />;
+        // Pass handleNavigate so the component can redirect to settings
+        return <Employees onNavigate={handleNavigate} />;
       case 'add-employee':
-        return <Employees initialAction="add" />;
-      case 'login-deactivate':
-        return <Employees />; 
-      case 'add-department':
-      case 'add-designation':
-        return <DepartmentSettings />;
+        return <Employees initialAction="add" onNavigate={handleNavigate} />;
 
       case 'users':
         return <UserManagement />;
@@ -156,7 +105,6 @@ export const App: React.FC = () => {
       case 'user-logs':
         return <UserLogs />;
 
-      // Finance Control Routes
       case 'fees':
       case 'fee-collection':
         return <Fees initialTab="collection" />;
@@ -166,13 +114,12 @@ export const App: React.FC = () => {
       case 'discount-bonus':
         return <FinanceDiscounts />;
       
-      // Payroll Routes
       case 'payroll':
-      case 'pay-salary': // For safety
+      case 'pay-salary':
         return <Payroll initialTab="payment" />;
       case 'payroll-management':
-      case 'salary-management': // For safety
-        return <Payroll initialTab="structure" />;
+      case 'salary-management':
+        return <Payroll initialTab="designation" />;
         
       case 'attendance':
         return <Attendance />;
