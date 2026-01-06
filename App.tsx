@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, Suspense } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -9,7 +8,6 @@ import { UserProfile } from './types';
 import { dbService, supabase } from './services/supabase';
 import { LoginPage } from './components/LoginPage';
 import { Loader2 } from 'lucide-react';
-import { GeminiChatWidget } from './components/GeminiChatWidget';
 
 // Lazy Load Components
 const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
@@ -206,8 +204,6 @@ export const App: React.FC = () => {
                 {renderContent()}
               </Suspense>
             </main>
-
-            <GeminiChatWidget />
           </div>
         </PermissionProvider>
       </SettingsProvider>
