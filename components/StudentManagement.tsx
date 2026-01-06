@@ -22,7 +22,6 @@ interface StudentManagementProps {
 
 export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStudentSearch, pageTitle = "Student Management" }) => {
   const { can } = usePermissions();
-  // ... state ...
   const [students, setStudents] = React.useState<Student[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -137,7 +136,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
     if (!window.confirm("Are you sure you want to permanently delete this student record? This action cannot be undone immediately.")) {
       return;
     }
-    
     try {
       const result = await dbService.deleteStudent(studentId);
       if (result.success) {
@@ -154,7 +152,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
     }
   };
 
-  // ... (openProfile, handleInputChange, handleSameAsMobileChange same as before) ...
   const openProfile = async (student: Student) => {
     setSelectedStudent(student);
     setIsWhatsappSame(false); 
@@ -318,7 +315,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
     setShowExportMenu(false);
   };
 
-  // ... (Rest of UI identical) ...
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (s.admission_no || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -380,7 +376,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto" onClick={() => { setShowColumnMenu(false); setShowExportMenu(false); }}>
-      {/* ... (UI Content exactly as before) ... */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
           <GraduationCap className="w-8 h-8 text-indigo-600" /> {pageTitle}
@@ -394,18 +389,33 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
             <input type="text" placeholder="Search by name, admission no..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"/>
          </div>
          <div className="flex items-center gap-2 flex-wrap justify-end w-full lg:w-auto">
+            {/* Dynamic Class Filter Dropdown */}
+            <div className="relative">
+              <select 
+                value={selectedClass} 
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="">All Classes</option>
+                {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
             <div className="bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg flex items-center">
                <button onClick={() => setShowInactive(false)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${!showInactive ? 'bg-white dark:bg-gray-600 text-indigo-600 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>Active</button>
                <button onClick={() => setShowInactive(true)} className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${showInactive ? 'bg-white dark:bg-gray-600 text-red-600 dark:text-red-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>Inactive</button>
             </div>
             
-            <div className="flex items-center bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg"><button onClick={() => setViewMode('grid')} className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><LayoutGrid className="w-4 h-4" /></button><button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><List className="w-4 h-4" /></button><button onClick={() => setViewMode('thumbnail')} className={`p-2 rounded-md transition-all ${viewMode === 'thumbnail' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><ImageIcon className="w-4 h-4" /></button></div>
+            <div className="flex items-center bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
+              <button onClick={() => setViewMode('grid')} className={`p-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('list')} className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><List className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('thumbnail')} className={`p-2 rounded-md transition-all ${viewMode === 'thumbnail' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}><ImageIcon className="w-4 h-4" /></button>
+            </div>
          </div>
       </div>
 
       {isLoading ? (<div className="flex justify-center py-12"><Loader2 className="w-10 h-10 animate-spin text-indigo-600" /></div>) : 
         filteredStudents.length === 0 ? (<div className="text-center py-12 text-gray-500 dark:text-gray-400">No students found.</div>) : (
-        /* Render View Modes */
         viewMode === 'list' ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
              <div className="overflow-x-auto">
@@ -542,8 +552,30 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-1.5 md:col-span-2"><label className="text-sm font-medium">Full Name</label><input name="full_name" value={formData.full_name} onChange={handleInputChange} className={getInputClass('full_name')} /></div>
                             <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth <span className="text-red-500">*</span></label><input type="date" name="dob" value={formData.dob || ''} onChange={handleInputChange} className={getInputClass('dob')} />{errors.dob && <p className="text-xs text-red-500">{errors.dob}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Gender <span className="text-red-500">*</span></label><select name="gender" value={formData.gender} onChange={handleInputChange} className={getInputClass('gender')}><option value="male">Male</option><option value="female">Female</option></select>{errors.gender && <p className="text-xs text-red-500">{errors.gender}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Aadhar Number <span className="text-red-500">*</span></label><input name="aadhar_no" value={formData.aadhar_no || ''} onChange={handleInputChange} className={getInputClass('aadhar_no')} placeholder="12-digit number" maxLength={12} />{errors.aadhar_no && <p className="text-xs text-red-500">{errors.aadhar_no}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Blood Group</label><select name="blood_group" value={formData.blood_group || ''} onChange={handleInputChange} className="input-field"><option value="">Select</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="O+">O+</option><option value="O-">O-</option><option value="AB+">AB+</option><option value="AB-">AB-</option></select></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Identification Mark</label><input name="identification_mark" value={formData.identification_mark || ''} onChange={handleInputChange} className="input-field" placeholder="Mole on right cheek..." /></div></div>)}
-                          {/* ... rest of tabs ... */}
-                          {activeTab === 'academic' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission No</label><input name="admission_no" value={formData.admission_no || ''} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Class <span className="text-red-500">*</span></label><select name="class_section" value={formData.class_section || ''} onChange={handleInputChange} className={getInputClass('class_section')}><option value="">Select</option>{availableClasses.map(c => (<option key={c} value={c}>{c}</option>))}</select>{errors.class_section && <p className="text-xs text-red-500">{errors.class_section}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Section <span className="text-red-500">*</span></label><select name="section" value={formData.section || ''} onChange={handleInputChange} className={getInputClass('section')}><option value="">Select</option>{availableSections.map(s => (<option key={s} value={s}>{s}</option>))}</select>{errors.section && <p className="text-xs text-red-500">{errors.section}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission Date</label><input type="date" value={new Date(formData.created_at).toISOString().split('T')[0]} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div></div>)}
+                          
+                          {activeTab === 'academic' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission No</label><input name="admission_no" value={formData.admission_no || ''} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div>
+                              <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Class <span className="text-red-500">*</span></label>
+                                <select name="class_section" value={formData.class_section || ''} onChange={handleInputChange} className={getInputClass('class_section')}>
+                                  <option value="">Select</option>
+                                  {availableClasses.map(c => (<option key={c} value={c}>{c}</option>))}
+                                </select>
+                                {errors.class_section && <p className="text-xs text-red-500">{errors.class_section}</p>}
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Section <span className="text-red-500">*</span></label>
+                                <select name="section" value={formData.section || ''} onChange={handleInputChange} className={getInputClass('section')}>
+                                  <option value="">Select</option>
+                                  {availableSections.map(s => (<option key={s} value={s}>{s}</option>))}
+                                </select>
+                                {errors.section && <p className="text-xs text-red-500">{errors.section}</p>}
+                              </div>
+                              <div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Admission Date</label><input type="date" value={new Date(formData.created_at).toISOString().split('T')[0]} className="input-field bg-gray-100 dark:bg-gray-700 cursor-not-allowed" readOnly /></div>
+                            </div>
+                          )}
+
                           {activeTab === 'parents' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Father Name <span className="text-red-500">*</span></label><input name="father_name" value={formData.father_name || ''} onChange={handleInputChange} className={getInputClass('father_name')} />{errors.father_name && <p className="text-xs text-red-500">{errors.father_name}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Father Qualification</label><input name="father_qualification" value={formData.father_qualification || ''} onChange={handleInputChange} className="input-field" /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mother Name <span className="text-red-500">*</span></label><input name="mother_name" value={formData.mother_name || ''} onChange={handleInputChange} className={getInputClass('mother_name')} />{errors.mother_name && <p className="text-xs text-red-500">{errors.mother_name}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mother Qualification</label><input name="mother_qualification" value={formData.mother_qualification || ''} onChange={handleInputChange} className="input-field" /></div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Mobile No <span className="text-red-500">*</span></label><div className="relative"><Phone className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" /><input name="phone" value={formData.phone || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('phone')}`} maxLength={10} placeholder="10-digit number" /></div>{errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}</div><div className="space-y-1.5"><div className="flex justify-between items-center"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Whatsapp No</label><div className="flex items-center gap-2"><input type="checkbox" id="sameAsMobileAdm" checked={isWhatsappSame} onChange={handleSameAsMobileChange} className="w-3.5 h-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" /><label htmlFor="sameAsMobileAdm" className="text-xs text-gray-500 cursor-pointer select-none">Same as Mobile</label></div></div><div className="relative"><MessageCircle className="absolute left-3 top-2.5 h-5 w-5 text-green-500" /><input name="whatsapp_no" value={formData.whatsapp_no || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('whatsapp_no')}`} maxLength={10} placeholder="10-digit number" /></div>{errors.whatsapp_no && <p className="text-xs text-red-500">{errors.whatsapp_no}</p>}</div><div className="space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label><div className="relative"><div className="absolute left-3 top-2.5 text-gray-400">@</div><input name="email" value={formData.email || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('email')}`} placeholder="email@example.com" /></div>{errors.email && <p className="text-xs text-red-500">{errors.email}</p>}</div><div className="col-span-1 md:col-span-2 space-y-1.5"><label className="text-sm font-medium text-gray-700 dark:text-gray-300">Residential Address <span className="text-red-500">*</span></label><div className="relative"><MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" /><textarea name="address" value={formData.address || ''} onChange={handleInputChange} className={`!pl-10 ${getInputClass('address')}`} rows={3} /></div>{errors.address && <p className="text-xs text-red-500">{errors.address}</p>}</div></div>)}
                           {activeTab === 'facilities' && (<div className="space-y-4"><div className={`p-4 border rounded-xl bg-gray-50 dark:bg-gray-700/30 ${errors.fee_category ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'}`}><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><CreditCard className="w-5 h-5" /><h3 className="font-bold">Fee Category <span className="text-red-500">*</span></h3></div><select name="fee_category" value={formData.fee_category || ''} onChange={handleInputChange} className={getInputClass('fee_category')}><option value="">Select Fee Category</option><option value="Standard Fee">Standard Fee</option><option value="Scholarship">Scholarship</option><option value="Staff Child">Staff Child</option><option value="Sibling Discount">Sibling Discount</option></select>{errors.fee_category && <p className="text-xs text-red-500 mt-1">{errors.fee_category}</p>}</div><div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/30"><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><Bus className="w-5 h-5" /><h3 className="font-bold">Transport Route</h3></div><select name="transport_route" value={formData.transport_route || ''} onChange={handleInputChange} className="input-field"><option value="">No Transport Required</option><option value="Route 1">Route 1</option><option value="Route 2">Route 2</option></select></div><div className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/30"><div className="flex items-center gap-2 mb-3 text-indigo-600 dark:text-indigo-400"><Home className="w-5 h-5" /><h3 className="font-bold">Hostel Accommodation</h3></div><select name="hostel_room" value={formData.hostel_room || ''} onChange={handleInputChange} className="input-field"><option value="">Day Scholar</option><option value="Block A - Boys">Block A - Boys</option><option value="Block B - Girls">Block B - Girls</option></select></div></div>)}
                           {activeTab === 'documents' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{renderDocumentCard('Aadhar Card')}{renderDocumentCard('Transfer Certificate')}{renderDocumentCard('Birth Certificate')}{renderDocumentCard('Previous Report Card')}</div>)}
@@ -560,7 +592,6 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({ initialStu
         </div>
       )}
 
-      {/* ... (Other modals unchanged) ... */}
       {isEditorOpen && selectedImageSrc && (<ImageEditor imageSrc={selectedImageSrc} onClose={() => setIsEditorOpen(false)} onSave={handleEditorSave} />)}
       {statusToggleModalOpen && studentToToggle && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">

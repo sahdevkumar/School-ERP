@@ -4,10 +4,12 @@ import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { ToastProvider } from './context/ToastContext';
 import { PermissionProvider } from './context/PermissionContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { UserProfile } from './types';
 import { dbService, supabase } from './services/supabase';
 import { LoginPage } from './components/LoginPage';
 import { Loader2 } from 'lucide-react';
+import { GeminiChatWidget } from './components/GeminiChatWidget';
 
 // Lazy Load Components
 const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
@@ -22,6 +24,7 @@ const UserManagement = React.lazy(() => import('./components/UserManagement').th
 const UserLogs = React.lazy(() => import('./components/UserLogs').then(module => ({ default: module.UserLogs })));
 const Fees = React.lazy(() => import('./components/Fees').then(module => ({ default: module.Fees })));
 const Payroll = React.lazy(() => import('./components/Payroll').then(module => ({ default: module.Payroll })));
+const SalaryManagement = React.lazy(() => import('./components/SalaryManagement').then(module => ({ default: module.SalaryManagement })));
 const Attendance = React.lazy(() => import('./components/Attendance').then(module => ({ default: module.Attendance })));
 const FinanceDiscounts = React.lazy(() => import('./components/FinanceDiscounts').then(module => ({ default: module.FinanceDiscounts })));
 
@@ -94,7 +97,6 @@ export const App: React.FC = () => {
       case 'employees':
       case 'teachers':
       case 'employee-list':
-        // Pass handleNavigate so the component can redirect to settings
         return <Employees onNavigate={handleNavigate} />;
       case 'add-employee':
         return <Employees initialAction="add" onNavigate={handleNavigate} />;
@@ -116,10 +118,11 @@ export const App: React.FC = () => {
       
       case 'payroll':
       case 'pay-salary':
-        return <Payroll initialTab="payment" />;
+        return <Payroll />;
+        
       case 'payroll-management':
       case 'salary-management':
-        return <Payroll initialTab="designation" />;
+        return <SalaryManagement />;
         
       case 'attendance':
         return <Attendance />;
@@ -170,40 +173,44 @@ export const App: React.FC = () => {
 
   return (
     <ToastProvider>
-      <PermissionProvider role={userProfile.role}>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-          <Sidebar 
-            isOpen={sidebarOpen} 
-            isCollapsed={isCollapsed}
-            toggleCollapse={toggleCollapse}
-            closeMobileSidebar={() => setSidebarOpen(false)}
-            user={userProfile}
-            onNavigate={handleNavigate}
-            onLogout={handleLogout}
-          />
-          
-          <TopBar 
-            toggleMobileSidebar={toggleSidebar}
-            isDark={isDark}
-            toggleTheme={toggleTheme}
-            isCollapsed={isCollapsed}
-            user={userProfile}
-            onLogout={handleLogout}
-          />
+      <SettingsProvider>
+        <PermissionProvider role={userProfile.role}>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+            <Sidebar 
+              isOpen={sidebarOpen} 
+              isCollapsed={isCollapsed}
+              toggleCollapse={toggleCollapse}
+              closeMobileSidebar={() => setSidebarOpen(false)}
+              user={userProfile}
+              onNavigate={handleNavigate}
+              onLogout={handleLogout}
+            />
+            
+            <TopBar 
+              toggleMobileSidebar={toggleSidebar}
+              isDark={isDark}
+              toggleTheme={toggleTheme}
+              isCollapsed={isCollapsed}
+              user={userProfile}
+              onLogout={handleLogout}
+            />
 
-          <main className={`transition-all duration-300 pt-20 px-4 md:px-6 pb-8 min-h-screen
-            ${isCollapsed ? 'lg:ml-20' : 'lg:ml-72'}
-          `}>
-            <Suspense fallback={
-              <div className="flex items-center justify-center min-h-[50vh]">
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
-              </div>
-            }>
-              {renderContent()}
-            </Suspense>
-          </main>
-        </div>
-      </PermissionProvider>
+            <main className={`transition-all duration-300 pt-20 px-4 md:px-6 pb-8 min-h-screen
+              ${isCollapsed ? 'lg:ml-20' : 'lg:ml-72'}
+            `}>
+              <Suspense fallback={
+                <div className="flex items-center justify-center min-h-[50vh]">
+                  <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+                </div>
+              }>
+                {renderContent()}
+              </Suspense>
+            </main>
+
+            <GeminiChatWidget />
+          </div>
+        </PermissionProvider>
+      </SettingsProvider>
     </ToastProvider>
   );
 };

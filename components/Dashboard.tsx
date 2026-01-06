@@ -5,6 +5,7 @@ import { Users, GraduationCap, CalendarCheck, DollarSign, RefreshCw, Database, C
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { dbService } from '../services/supabase';
 import { DashboardStats, AttendanceRecord, StudentDemographic, Student, DashboardLayoutConfig } from '../types';
+import { useSettings } from '../context/SettingsContext';
 
 const COLORS = ['#6366f1', '#ec4899'];
 
@@ -13,6 +14,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  const { currencySymbol } = useSettings();
   const [loading, setLoading] = React.useState(true);
   const [isConnected, setIsConnected] = React.useState(false);
   const [stats, setStats] = React.useState<DashboardStats>({
@@ -161,7 +163,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         {layout.stats_revenue && (
           <StatCard 
             title="Revenue" 
-            value={`$${(stats.revenue / 1000).toFixed(0)}k`} 
+            value={`${currencySymbol}${(stats.revenue / 1000).toFixed(0)}k`} 
             change="8.2%" 
             isPositive={true} 
             icon={DollarSign} 

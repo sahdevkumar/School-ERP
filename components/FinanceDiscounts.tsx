@@ -4,8 +4,10 @@ import { Percent, Plus, Trash2, Tag, Gift, Save, Loader2, DollarSign } from 'luc
 import { dbService } from '../services/supabase';
 import { Discount } from '../types';
 import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
 
 export const FinanceDiscounts: React.FC = () => {
+  const { currencySymbol } = useSettings();
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [activeTab, setActiveTab] = useState<'student' | 'employee'>('student');
   const [loading, setLoading] = useState(false);
@@ -67,9 +69,12 @@ export const FinanceDiscounts: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Percent className="w-8 h-8 text-indigo-600" /> Discount & Bonus
+            <div className="p-2 bg-indigo-600 rounded-xl">
+               <Percent className="w-8 h-8 text-white" />
+            </div>
+            Discount & Bonus
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">Manage student fee discounts and employee salary bonuses.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage student fee discounts and employee salary bonuses.</p>
         </div>
         <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
           <button 
@@ -110,18 +115,21 @@ export const FinanceDiscounts: React.FC = () => {
               className="input-field w-full"
             >
               <option value="percentage">Percentage (%)</option>
-              <option value="flat">Flat Amount ($)</option>
+              <option value="flat">Flat Amount ({currencySymbol})</option>
             </select>
           </div>
           <div className="md:col-span-2 space-y-1">
             <label className="text-xs font-medium text-gray-500">Value</label>
-            <input 
-              type="number" 
-              placeholder="0" 
-              value={newDiscount.value || ''} 
-              onChange={e => setNewDiscount({...newDiscount, value: Number(e.target.value)})} 
-              className="input-field w-full" 
-            />
+            <div className="relative">
+               <div className="absolute left-3 top-3 h-4 w-4 text-gray-400 flex items-center justify-center font-bold text-xs">{newDiscount.type === 'percentage' ? '%' : currencySymbol}</div>
+               <input 
+                 type="number" 
+                 placeholder="0" 
+                 value={newDiscount.value || ''} 
+                 onChange={e => setNewDiscount({...newDiscount, value: Number(e.target.value)})} 
+                 className="input-field w-full pl-10" 
+               />
+            </div>
           </div>
           <div className="md:col-span-3 space-y-1">
             <label className="text-xs font-medium text-gray-500">Description</label>
@@ -136,7 +144,7 @@ export const FinanceDiscounts: React.FC = () => {
             <button 
               onClick={handleAdd} 
               disabled={isSaving}
-              className="w-full py-2.5 bg-indigo-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors disabled:opacity-70"
+              className="w-full py-2.5 bg-indigo-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors disabled:opacity-70 shadow-lg shadow-indigo-500/20"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add
             </button>
@@ -149,7 +157,7 @@ export const FinanceDiscounts: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 text-xs uppercase">
+                <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 text-xs uppercase font-bold tracking-wider">
                   <th className="pb-3 pl-2">Name</th>
                   <th className="pb-3">Type</th>
                   <th className="pb-3">Value</th>
@@ -159,11 +167,11 @@ export const FinanceDiscounts: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {filteredDiscounts.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="py-3 pl-2 font-medium text-gray-900 dark:text-white">{item.name}</td>
                     <td className="py-3 text-gray-600 dark:text-gray-400 capitalize">{item.type}</td>
                     <td className="py-3 font-bold text-indigo-600 dark:text-indigo-400">
-                      {item.type === 'percentage' ? `${item.value}%` : `$${item.value}`}
+                      {item.type === 'percentage' ? `${item.value}%` : `${currencySymbol}${item.value}`}
                     </td>
                     <td className="py-3 text-sm text-gray-500">{item.description || '-'}</td>
                     <td className="py-3 text-right pr-2">
@@ -174,7 +182,7 @@ export const FinanceDiscounts: React.FC = () => {
                   </tr>
                 ))}
                 {filteredDiscounts.length === 0 && (
-                  <tr><td colSpan={5} className="py-8 text-center text-gray-500">No records found.</td></tr>
+                  <tr><td colSpan={5} className="py-12 text-center text-gray-500">No records found.</td></tr>
                 )}
               </tbody>
             </table>

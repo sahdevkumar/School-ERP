@@ -9,13 +9,13 @@ import {
   Discount
 } from '../types';
 
-// New interface for the requested structure
+// Updated interface to match SalaryManagement.tsx storage
 export interface SalaryConfigEntry {
   id: string;
-  employee_type: string;
-  designation: string;
+  department: string;
   level: string;
   amount: number;
+  frequency: string;
 }
 
 // Initialize Supabase with environment variables
@@ -39,19 +39,19 @@ const stringifySettingValue = (value: any) => {
   return JSON.stringify(value);
 };
 
-// Sanitization for Employee Schema - strictly matching user DB structure
+// Sanitization for Employee Schema
 const ALLOWED_EMPLOYEE_FIELDS = [
   'id', 'full_name', 'phone', 'email', 'address', 'dob', 'gender', 
-  'qualification', 'joining_date', 'photo_url', 'status', 
+  'blood_group', 'aadhar_no', 'qualification', 'total_experience', 
+  'joining_date', 'photo_url', 'status', 
   'bank_name', 'bank_account_no', 'bank_ifsc_code', 'bank_branch_name', 
-  'upi_id', 'account_holder_name', 'salary_amount', 'subject', 'department',
-  'employee_type', 'level'
+  'upi_id', 'account_holder_name', 'salary_amount', 'salary_frequency', 'subject', 'department',
+  'employee_type', 'level', 'academic_subject', 'salary_role'
 ];
 
 function sanitizeEmployee(emp: any) {
   const clean: any = {};
   ALLOWED_EMPLOYEE_FIELDS.forEach(field => {
-    // Only include if defined (allow null for optional DB fields)
     if (emp[field] !== undefined) clean[field] = emp[field];
   });
   return clean;
@@ -120,9 +120,11 @@ export class DBService {
   // Dashboard
   async checkConnection(): Promise<boolean> {
       try {
-          if (supabaseUrl === 'https://placeholder.supabase.co') return false;
-          const { error } = await supabase.from('system_settings').select('key').limit(1);
-          return !error;
+          if (supabaseUrl === 'https://vslbpndyjbmlwggnrjze.supabase.co') {
+             const { error } = await supabase.from('system_settings').select('key').limit(1);
+             return !error;
+          }
+          return false;
       } catch {
           return false;
       }
@@ -262,9 +264,16 @@ export class DBService {
             children: [
               { label: 'General Settings', icon: 'Globe', href: 'global-settings' },
               { label: 'School Info', icon: 'School', href: 'school-settings' },
-              // Removed standalone 'Employees Configuration'
               { label: 'User Config', icon: 'UserCog', href: 'user-configuration' },
-              { label: 'Student Fields', icon: 'BookOpen', href: 'system-student-field' },
+              { 
+                label: 'School Config', 
+                icon: 'BookOpen', 
+                children: [
+                   { label: 'Class', href: 'settings-class' },
+                   { label: 'Section', href: 'settings-section' },
+                   { label: 'Subject', href: 'settings-subject' }
+                ]
+              },
               { label: 'Role Permissions', icon: 'Shield', href: 'role-permissions' },
               { label: 'Layout Config', icon: 'LayoutTemplate', href: 'dashboard-layout' },
               { label: 'Menu Config', icon: 'Menu', href: 'menu-layout' },
@@ -351,18 +360,33 @@ export class DBService {
     }
   }
 
-  // --- Salary Configuration By Designation (Refactored for Array) ---
+  // Fix for: Error in file components/Employees.tsx: Property 'uploadEmployeeDocument' does not exist on type 'DBService'.
+  async uploadEmployeeDocument(file: File, employeeId: number, documentType: string) {
+    try {
+      const uploadRes = await this.uploadSystemAsset(file, 'employee-documents');
+      if (uploadRes.error) return { success: false, error: uploadRes.error };
+      
+      const { error } = await supabase.from('employee_documents').insert([{
+        employee_id: employeeId,
+        document_type: documentType,
+        file_url: uploadRes.publicUrl,
+        uploaded_at: new Date().toISOString()
+      }]);
+      
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  // --- Salary Configuration ---
   async getSalaryConfigs(): Promise<SalaryConfigEntry[]> {
       return this.getSettingByKey<SalaryConfigEntry[]>('payroll_salary_configs_v2', []);
   }
 
   async saveSalaryConfigs(configs: SalaryConfigEntry[]) {
       return this.saveSettingByKey('payroll_salary_configs_v2', configs);
-  }
-
-  // Backward compatibility wrapper (optional)
-  async getDesignationSalaries(): Promise<Record<string, number>> {
-      return this.getSettingByKey<Record<string, number>>('payroll_designation_salaries', {});
   }
 
   async syncDesignationSalaries(designation: string, amount: number, type?: string, level?: string) {
@@ -372,10 +396,8 @@ export class DBService {
             .update({ salary_amount: amount })
             .eq('subject', designation)
             .eq('status', 'active');
-          
           if (type) query = query.eq('employee_type', type);
           if (level) query = query.eq('level', level);
-
           const { error } = await query;
           if (error) throw error;
           return { success: true };
@@ -434,7 +456,7 @@ export class DBService {
        return { success: true };
     } catch (e) {
        const current = await this.getDiscounts();
-       const newDiscounts = [...current, { ...discount, id: Date.now() }]; // Mock ID
+       const newDiscounts = [...current, { ...discount, id: Date.now() }]; 
        return this.saveSettingByKey('finance_discounts', newDiscounts);
     }
   }
@@ -537,39 +559,52 @@ export class DBService {
     } catch (e: any) { return { success: false, error: e.message }; }
   }
   
-  // --- Student Misc ---
+  // --- Student Documents ---
   async getStudentDocuments(id: number): Promise<StudentDocument[]> {
     try {
       const { data } = await supabase.from('student_documents').select('*').eq('student_id', id);
       return data || [];
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   }
-  async uploadProfilePhoto(file: File) { return this.uploadSystemAsset(file, 'student-photos'); }
-  async uploadStudentDocument(file: File, id: number, type: string) {
+
+  async uploadProfilePhoto(file: File) {
+    return this.uploadSystemAsset(file, 'student-photos');
+  }
+
+  async uploadStudentDocument(file: File, studentId: number, documentType: string) {
     try {
-        const { publicUrl, error } = await this.uploadSystemAsset(file, 'student-documents');
-        if (error) return { success: false, error };
-        const { error: dbError } = await supabase.from('student_documents').insert([{ student_id: id, document_type: type, file_url: publicUrl }]);
-        if (dbError) return { success: false, error: dbError.message };
-        return { success: true };
-    } catch (e: any) { return { success: false, error: e.message }; }
+      const uploadRes = await this.uploadSystemAsset(file, 'student-documents');
+      if (uploadRes.error) return { success: false, error: uploadRes.error };
+      
+      const { error } = await supabase.from('student_documents').insert([{
+        student_id: studentId,
+        document_type: documentType,
+        file_url: uploadRes.publicUrl,
+        uploaded_at: new Date().toISOString()
+      }]);
+      
+      if (error) return { success: false, error: error.message };
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
   }
-  
+
+  // --- Student Fields Source of Truth ---
   async getStudentFields() {
     return {
-      classes: await this.getSettingByKey<string[]>('field_classes', ['Class 1', 'Class 2']),
-      sections: await this.getSettingByKey<string[]>('field_sections', ['A', 'B']),
-      subjects: await this.getStudentFieldsSubjects()
+      classes: await this.getSettingByKey<string[]>('config_classes', ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5']),
+      sections: await this.getSettingByKey<string[]>('config_sections', ['A', 'B', 'C']),
+      subjects: await this.getSettingByKey<string[]>('config_subjects', ['Mathematics', 'Science', 'English', 'History'])
     };
-  }
-  private async getStudentFieldsSubjects() {
-      return this.getSettingByKey<string[]>('field_subjects', ['Math', 'Science']);
   }
   async saveStudentFields(fields: any) {
     try {
-      await this.saveSettingByKey('field_classes', fields.classes);
-      await this.saveSettingByKey('field_sections', fields.sections);
-      await this.saveSettingByKey('field_subjects', fields.subjects);
+      if (fields.classes) await this.saveSettingByKey('config_classes', fields.classes);
+      if (fields.sections) await this.saveSettingByKey('config_sections', fields.sections);
+      if (fields.subjects) await this.saveSettingByKey('config_subjects', fields.subjects);
       return { success: true };
     } catch (e: any) { return { success: false, error: e.message }; }
   }
@@ -635,29 +670,15 @@ export class DBService {
     } catch (e: any) { return { success: false, error: e.message }; }
   }
   async approveRegistration(id: number) {
-    // 1. Get reg data
     const { data: reg } = await supabase.from('student_registrations').select('*').eq('id', id).single();
     if (!reg) return { success: false, error: "Registration not found" };
-    
-    // 2. Create student
     const student: Partial<Student> = {
-      full_name: reg.full_name,
-      gender: reg.gender,
-      dob: reg.dob,
-      phone: reg.phone,
-      email: reg.email,
-      address: reg.address,
-      father_name: reg.father_name,
-      mother_name: reg.mother_name,
-      class_section: reg.class_enrolled,
-      previous_school: reg.previous_school,
-      student_status: 'provisional'
+      full_name: reg.full_name, gender: reg.gender, dob: reg.dob, phone: reg.phone, email: reg.email,
+      address: reg.address, father_name: reg.father_name, mother_name: reg.mother_name,
+      class_section: reg.class_enrolled, previous_school: reg.previous_school, student_status: 'provisional'
     };
-    
     const { error: createError } = await supabase.from('students').insert([student]);
     if (createError) return { success: false, error: createError.message };
-    
-    // 3. Update status
     await this.updateRegistrationStatus(id, 'approved');
     return { success: true };
   }
@@ -687,24 +708,14 @@ export class DBService {
     } catch (e: any) { return { success: false, error: e.message }; }
   }
 
-  // --- Departments & Designations (Reverted to JSON Settings) ---
-  async getDepartments() {
-    return this.getSettingByKey<string[]>('config_departments', []);
-  }
+  // --- Config Helpers ---
+  async getDepartments() { return this.getSettingByKey<string[]>('config_departments', []); }
+  async saveDepartments(depts: string[]) { return this.saveSettingByKey('config_departments', depts); }
+  async getDesignations() { return this.getSettingByKey<string[]>('config_designations', []); }
+  async saveDesignations(desigs: string[]) { return this.saveSettingByKey('config_designations', desigs); }
+  async getSalaryRoles() { return this.getSettingByKey<string[]>('config_salary_roles', ['Standard', 'Contract', 'Guest Faculty']); }
+  async saveSalaryRoles(roles: string[]) { return this.saveSettingByKey('config_salary_roles', roles); }
 
-  async saveDepartments(depts: string[]) {
-    return this.saveSettingByKey('config_departments', depts);
-  }
-
-  async getDesignations() {
-    return this.getSettingByKey<string[]>('config_designations', []);
-  }
-
-  async saveDesignations(desigs: string[]) {
-    return this.saveSettingByKey('config_designations', desigs);
-  }
-
-  // --- User Management (Reverted to JSON Settings for Config) ---
   async getSystemUsers(): Promise<SystemUser[]> {
     try {
       const { data } = await supabase.from('system_users').select('*');
@@ -735,22 +746,9 @@ export class DBService {
   
   async getUserConfiguration() {
     try {
-      // Roles from Settings
-      const userTypes = await this.getSettingByKey<string[]>('config_user_roles', []);
-      // Fields from Settings
+      const userTypes = await this.getSettingByKey<string[]>('config_user_roles', ['Super Admin', 'Admin', 'Editor', 'Viewer']);
       const userFields = await this.getSettingByKey<any[]>('config_user_fields', []);
-
-      if (userTypes.length === 0) {
-         return {
-           userTypes: ['Super Admin', 'Admin', 'Editor', 'Viewer'],
-           userFields
-         };
-      }
-
-      return {
-        userTypes,
-        userFields
-      };
+      return { userTypes, userFields };
     } catch (e) {
       return { userTypes: [], userFields: [] };
     }
@@ -758,16 +756,10 @@ export class DBService {
 
   async saveUserConfiguration(config: any) {
     try {
-      if (config.userTypes) {
-        await this.saveSettingByKey('config_user_roles', config.userTypes);
-      }
-      if (config.userFields) {
-        await this.saveSettingByKey('config_user_fields', config.userFields);
-      }
+      if (config.userTypes) await this.saveSettingByKey('config_user_roles', config.userTypes);
+      if (config.userFields) await this.saveSettingByKey('config_user_fields', config.userFields);
       return { success: true };
-    } catch (e: any) {
-      return { success: false, error: e.message };
-    }
+    } catch (e: any) { return { success: false, error: e.message }; }
   }
 
   async ensureCustomFieldsSchema(): Promise<{ success: boolean; error?: string }> { return { success: true }; }
@@ -784,7 +776,6 @@ export class DBService {
     return this.saveSettingByKey('config_permissions', perms);
   }
 
-  // --- Recycle Bin ---
   async getRecycleBinItems(): Promise<AdmissionEnquiry[]> {
     try {
       const { data } = await supabase.from('admission_enquiries').select('*').eq('is_deleted', true);
@@ -806,7 +797,6 @@ export class DBService {
     } catch (e: any) { return { success: false, error: e.message }; }
   }
 
-  // --- Dashboard Layout ---
   async getDashboardLayout(): Promise<DashboardLayoutConfig> {
     return this.getSettingByKey<DashboardLayoutConfig>('config_dashboard_layout', {
       stats_students: true, stats_employees: true, stats_attendance: true, stats_revenue: true,
@@ -814,7 +804,6 @@ export class DBService {
     });
   }
   async saveDashboardLayout(config: any) { return this.saveSettingByKey('config_dashboard_layout', config); }
-  
   async getAdminPanelConfig(): Promise<AdminPanelConfig> {
     return this.getSettingByKey<AdminPanelConfig>('config_admin_panel', {
       sidebar_default_collapsed: false, table_compact_mode: false, enable_animations: true, show_breadcrumbs: true

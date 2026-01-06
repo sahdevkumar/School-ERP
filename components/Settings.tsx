@@ -30,7 +30,8 @@ import {
   UserCog, 
   PenTool, 
   Users,
-  Briefcase // Added Briefcase
+  Briefcase,
+  Wallet 
 } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { useToast } from '../context/ToastContext';
@@ -43,7 +44,6 @@ interface SettingsProps {
   activePage: string;
 }
 
-// Reusable Toggle Switch Component
 const ToggleSwitch = ({ label, enabled, onChange }: { label?: string, enabled: boolean, onChange: () => void }) => (
   <div className={`flex items-center justify-between py-2 ${label ? 'border-b border-gray-100 dark:border-gray-700 last:border-b-0' : ''}`}>
     {label && <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>}
@@ -64,7 +64,6 @@ const ToggleSwitch = ({ label, enabled, onChange }: { label?: string, enabled: b
   </div>
 );
 
-// Define Permission Modules
 const permissionModules = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'admission', label: 'Admission & Reception' },
@@ -85,16 +84,16 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const [menuLayout, setMenuLayout] = useState<NavItem[]>([]);
   const [rolePermissions, setRolePermissions] = useState<SystemPermissions | null>(null);
   
-  // User Config State
   const [userConfig, setUserConfig] = useState<{ userTypes: string[]; userFields: UserFieldConfig[] }>({ userTypes: [], userFields: [] });
   const [newUserType, setNewUserType] = useState('');
-  const [activeUserConfigTab, setActiveUserConfigTab] = useState<'types' | 'designations' | 'departments'>('types');
+  const [activeUserConfigTab, setActiveUserConfigTab] = useState<'types' | 'designations' | 'departments' | 'salary-roles'>('types');
 
-  // Employee Config State (Moved here)
   const [departments, setDepartments] = useState<string[]>([]);
   const [designations, setDesignations] = useState<string[]>([]);
+  const [salaryRoles, setSalaryRoles] = useState<string[]>([]);
   const [newDept, setNewDept] = useState('');
   const [newDesig, setNewDesig] = useState('');
+  const [newSalaryRole, setNewSalaryRole] = useState('');
 
   const [activeLayoutTab, setActiveLayoutTab] = useState<'dashboard' | 'admin' | 'menu'>('dashboard');
   const [activeRoleTab, setActiveRoleTab] = useState<string>('Admin');
@@ -104,20 +103,19 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const { showToast } = useToast();
   const { refreshPermissions } = usePermissions();
   
-  // Logo upload state
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-
-  // Menu Layout State
   const [openIconPicker, setOpenIconPicker] = useState<string | null>(null);
 
-
-  // Student Fields State
   const [studentFields, setStudentFields] = useState<{ classes: string[], sections: string[], subjects: string[] }>({ classes: [], sections: [], subjects: [] });
   const [newClass, setNewClass] = useState('');
   const [newSection, setNewSection] = useState('');
   const [newSubject, setNewSubject] = useState('');
   const [activeStudentFieldTab, setActiveStudentFieldTab] = useState<'classes' | 'sections' | 'subjects'>('classes');
+  
+  // Inline editing states for unified table
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   useEffect(() => {
     if (activePage === 'system-student-field') {
@@ -127,11 +125,10 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       fetchLayouts();
     } else if (activePage === 'role-permissions') {
       fetchPermissions();
-      fetchUserConfig(); // Fetch dynamic roles for permissions tab
+      fetchUserConfig();
     } else if (activePage === 'user-configuration') {
       fetchUserConfig();
     } else if (activePage === 'settings-users') {
-      // No specific load needed here, UserManagement handles it
     } else {
       fetchSettings();
     }
@@ -177,14 +174,16 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const fetchUserConfig = async () => {
     setIsLoading(true);
     try {
-        const [config, depts, desigs] = await Promise.all([
+        const [config, depts, desigs, sRoles] = await Promise.all([
             dbService.getUserConfiguration(),
             dbService.getDepartments(),
-            dbService.getDesignations()
+            dbService.getDesignations(),
+            dbService.getSalaryRoles()
         ]);
         setUserConfig(config);
         setDepartments(depts || []);
         setDesignations(desigs || []);
+        setSalaryRoles(sRoles || []);
     } catch (e) {
         console.error(e);
         showToast("Failed to load configuration", "error");
@@ -249,7 +248,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
 
     if (result.success) {
       showToast("Settings saved successfully!");
-      setLogoFile(null); // Reset file state
+      setLogoFile(null); 
     } else {
       const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
       showToast("Failed to save settings: " + errorMsg, 'error');
@@ -260,7 +259,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setIsSaving(true);
     const result = await dbService.saveStudentFields(studentFields);
     setIsSaving(false);
-    if (result.success) showToast("Student fields configuration saved!");
+    if (result.success) showToast("Student fields saved!");
     else {
       const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
       showToast("Failed to save: " + errorMsg, 'error');
@@ -301,7 +300,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setIsSaving(false);
     if (result.success) {
         showToast("Role & Permissions saved successfully!");
-        await refreshPermissions(); // Refresh context
+        await refreshPermissions(); 
     } else {
         const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
         showToast("Failed to save permissions: " + errorMsg, 'error');
@@ -311,31 +310,21 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
   const handleSaveUserConfig = async () => {
     setIsSaving(true);
     
-    // Save all three configurations
-    const [resConfig, resDept, resDesig] = await Promise.all([
+    const [resConfig, resDept, resDesig, resSalaryRoles] = await Promise.all([
         dbService.saveUserConfiguration(userConfig),
         dbService.saveDepartments(departments),
-        dbService.saveDesignations(designations)
+        dbService.saveDesignations(designations),
+        dbService.saveSalaryRoles(salaryRoles)
     ]);
     
-    if (resConfig.success && resDept.success && resDesig.success) {
-        showToast("User and Organization configuration saved!");
-        // Attempt Schema Sync
-        try {
-            const schemaResult = await dbService.ensureCustomFieldsSchema();
-            if (!schemaResult.success && schemaResult.error && schemaResult.error.includes("function") && schemaResult.error.includes("does not exist")) {
-                showToast("Note: Auto-schema update failed. SQL setup required.", 'info');
-            }
-        } catch (e) {
-            console.warn("Schema sync error", e);
-        }
+    if (resConfig.success) {
+        showToast("Configuration saved successfully!");
     } else {
-        showToast("Failed to save some configurations", 'error');
+        showToast("Failed to save configuration", 'error');
     }
     setIsSaving(false);
   };
 
-  // ... (rest of the component remains similar, helper functions etc.) ...
   const handleAddField = (type: 'classes' | 'sections' | 'subjects') => {
     let value = '';
     if (type === 'classes') value = newClass;
@@ -343,6 +332,11 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     if (type === 'subjects') value = newSubject;
 
     if (!value.trim()) return;
+
+    if (studentFields[type].includes(value.trim())) {
+      showToast(`${value.trim()} already exists in ${type}`, 'error');
+      return;
+    }
 
     setStudentFields(prev => ({ ...prev, [type]: [...prev[type], value.trim()] }));
 
@@ -355,9 +349,20 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setStudentFields(prev => ({ ...prev, [type]: prev[type].filter((_, i) => i !== index) }));
   };
 
-  // User Config Helpers
+  const handleUpdateField = (type: 'classes' | 'sections' | 'subjects', index: number) => {
+    if (!editingValue.trim()) {
+        setEditingIndex(null);
+        return;
+    }
+    const newList = [...studentFields[type]];
+    newList[index] = editingValue.trim();
+    setStudentFields(prev => ({ ...prev, [type]: newList }));
+    setEditingIndex(null);
+  };
+
   const addUserType = () => {
     if (!newUserType.trim()) return;
+    if (userConfig.userTypes.includes(newUserType.trim())) { showToast('Type exists', 'error'); return; }
     setUserConfig(prev => ({ ...prev, userTypes: [...prev.userTypes, newUserType.trim()] }));
     setNewUserType('');
   };
@@ -388,7 +393,39 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     setDesignations(designations.filter((_, i) => i !== index));
   };
 
-  // Menu Layout Handlers
+  const addSalaryRole = () => {
+    if (!newSalaryRole.trim()) return;
+    if (salaryRoles.includes(newSalaryRole.trim())) { showToast('Role exists', 'error'); return; }
+    setSalaryRoles([...salaryRoles, newSalaryRole.trim()]);
+    setNewSalaryRole('');
+  };
+
+  const removeSalaryRole = (index: number) => {
+    setSalaryRoles(salaryRoles.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateUserField = (type: 'types' | 'designations' | 'departments' | 'salary-roles', index: number) => {
+      if (!editingValue.trim()) { setEditingIndex(null); return; }
+      if (type === 'types') {
+          const newList = [...userConfig.userTypes];
+          newList[index] = editingValue.trim();
+          setUserConfig(prev => ({ ...prev, userTypes: newList }));
+      } else if (type === 'designations') {
+          const newList = [...designations];
+          newList[index] = editingValue.trim();
+          setDesignations(newList);
+      } else if (type === 'departments') {
+          const newList = [...departments];
+          newList[index] = editingValue.trim();
+          setDepartments(newList);
+      } else if (type === 'salary-roles') {
+          const newList = [...salaryRoles];
+          newList[index] = editingValue.trim();
+          setSalaryRoles(newList);
+      }
+      setEditingIndex(null);
+  };
+
   const handleMenuChange = (index: number, field: keyof NavItem, value: string) => {
     const newLayout = [...menuLayout];
     (newLayout[index] as any)[field] = value;
@@ -427,7 +464,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     }
   };
 
-  // Visual Icon Picker Component
   const renderIconPicker = (currentIcon: string, onSelect: (iconName: string) => void, pickerId: string) => {
     const Icon = getIcon(currentIcon);
     const isOpen = openIconPicker === pickerId;
@@ -470,145 +506,163 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
     );
   };
 
-
   const renderContent = () => {
-    // ... (same as existing) ...
     switch (activePage) {
       case 'settings-users':
         return <UserManagement />;
 
       case 'user-configuration':
-        // ... (User Configuration Content)
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
-            {/* ... (Header and Tabs) ... */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><UserCog className="w-5 h-5" /></div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">User Configuration</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">User & Payroll Config</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Manage user types, roles, and organizational structure.</p>
                 </div>
               </div>
               <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg overflow-x-auto">
-                <button 
-                  onClick={() => setActiveUserConfigTab('types')} 
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'types' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
-                >
+                <button onClick={() => { setActiveUserConfigTab('types'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'types' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
                   <Users className="w-4 h-4" /> User Types
                 </button>
-                <button 
-                  onClick={() => setActiveUserConfigTab('designations')} 
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'designations' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
-                >
+                <button onClick={() => { setActiveUserConfigTab('designations'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'designations' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
                   <Briefcase className="w-4 h-4" /> Designations
                 </button>
-                <button 
-                  onClick={() => setActiveUserConfigTab('departments')} 
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'departments' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
-                >
+                <button onClick={() => { setActiveUserConfigTab('departments'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'departments' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
                   <Layers className="w-4 h-4" /> Departments
+                </button>
+                <button onClick={() => { setActiveUserConfigTab('salary-roles'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeUserConfigTab === 'salary-roles' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
+                  <Wallet className="w-4 h-4" /> Salary Roles
                 </button>
               </div>
             </div>
 
-            <div className="mt-4">
-              {/* User Types Section */}
-              {activeUserConfigTab === 'types' && (
-                <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Users className="w-5 h-5 text-indigo-500" />
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage User Types (Roles)</h4>
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      value={newUserType}
-                      onChange={(e) => setNewUserType(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addUserType()}
-                      placeholder="Add new role (e.g., Driver, Staff)..."
-                      className="input-field flex-1"
-                    />
-                    <button onClick={addUserType} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {userConfig.userTypes.map((type, index) => (
-                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{type}</span>
-                        {/* Prevent deleting core system roles */}
-                        {!['Super Admin', 'Admin', 'Editor', 'Viewer'].includes(type) && (
-                          <button onClick={() => removeUserType(index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                        )}
-                      </div>
-                    ))}
-                    {userConfig.userTypes.length === 0 && <span className="text-sm text-gray-500 italic">No custom user types added.</span>}
-                  </div>
+            <div className="mt-4 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
+                <div className="flex items-center gap-2 mb-4">
+                    {activeUserConfigTab === 'types' && <Users className="w-5 h-5 text-indigo-500" />}
+                    {activeUserConfigTab === 'designations' && <Briefcase className="w-5 h-5 text-indigo-500" />}
+                    {activeUserConfigTab === 'departments' && <Layers className="w-5 h-5 text-indigo-500" />}
+                    {activeUserConfigTab === 'salary-roles' && <Wallet className="w-5 h-5 text-indigo-500" />}
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                      Manage {activeUserConfigTab === 'salary-roles' ? 'Salary Roles' : activeUserConfigTab.charAt(0).toUpperCase() + activeUserConfigTab.slice(1)}
+                    </h4>
                 </div>
-              )}
 
-              {/* Designations Section */}
-              {activeUserConfigTab === 'designations' && (
-                <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Briefcase className="w-5 h-5 text-indigo-500" />
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Employee Designations</h4>
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      value={newDesig}
-                      onChange={(e) => setNewDesig(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addDesignation()}
-                      placeholder="Add designation (e.g., Senior Teacher)..."
-                      className="input-field flex-1"
+                <div className="flex gap-2 mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <input 
+                      value={
+                        activeUserConfigTab === 'types' ? newUserType : 
+                        activeUserConfigTab === 'designations' ? newDesig : 
+                        activeUserConfigTab === 'departments' ? newDept : 
+                        newSalaryRole
+                      } 
+                      onChange={(e) => {
+                        if (activeUserConfigTab === 'types') setNewUserType(e.target.value);
+                        else if (activeUserConfigTab === 'designations') setNewDesig(e.target.value);
+                        else if (activeUserConfigTab === 'departments') setNewDept(e.target.value);
+                        else setNewSalaryRole(e.target.value);
+                      }} 
+                      onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            if (activeUserConfigTab === 'types') addUserType();
+                            else if (activeUserConfigTab === 'designations') addDesignation();
+                            else if (activeUserConfigTab === 'departments') addDepartment();
+                            else addSalaryRole();
+                          }
+                      }} 
+                      placeholder={`Add new ${activeUserConfigTab === 'types' ? 'user type' : activeUserConfigTab === 'salary-roles' ? 'salary role' : activeUserConfigTab.slice(0, -1)}...`} 
+                      className="input-field flex-1" 
                     />
-                    <button onClick={addDesignation} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {designations.map((item, index) => (
-                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
-                        <button onClick={() => removeDesignation(index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                      </div>
-                    ))}
-                    {designations.length === 0 && <span className="text-sm text-gray-500 italic">No designations added.</span>}
-                  </div>
+                    <button 
+                        onClick={() => {
+                            if (activeUserConfigTab === 'types') addUserType();
+                            else if (activeUserConfigTab === 'designations') addDesignation();
+                            else if (activeUserConfigTab === 'departments') addDepartment();
+                            else addSalaryRole();
+                        }} 
+                        className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-500/20"
+                    >
+                      <Plus className="w-6 h-6" />
+                    </button>
                 </div>
-              )}
 
-              {/* Departments Section */}
-              {activeUserConfigTab === 'departments' && (
-                <div className="bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Layers className="w-5 h-5 text-indigo-500" />
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Departments</h4>
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      value={newDept}
-                      onChange={(e) => setNewDept(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addDepartment()}
-                      placeholder="Add department (e.g., Science, IT)..."
-                      className="input-field flex-1"
-                    />
-                    <button onClick={addDepartment} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {departments.map((item, index) => (
-                      <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
-                        <button onClick={() => removeDepartment(index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                      </div>
-                    ))}
-                    {departments.length === 0 && <span className="text-sm text-gray-500 italic">No departments added.</span>}
-                  </div>
+                <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-gray-100 dark:border-gray-700 text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                <th className="px-6 py-4 w-16">#</th>
+                                <th className="px-6 py-4">Name</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                            {(
+                              activeUserConfigTab === 'types' ? userConfig.userTypes : 
+                              activeUserConfigTab === 'designations' ? designations : 
+                              activeUserConfigTab === 'departments' ? departments : 
+                              salaryRoles
+                            ).map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 group transition-colors">
+                                    <td className="px-6 py-4 text-sm text-gray-400 font-medium">{index + 1}</td>
+                                    <td className="px-6 py-4">
+                                        {editingIndex === index ? (
+                                            <input 
+                                                value={editingValue} 
+                                                onChange={e => setEditingValue(e.target.value)}
+                                                onBlur={() => handleUpdateUserField(activeUserConfigTab, index)}
+                                                onKeyDown={e => e.key === 'Enter' && handleUpdateUserField(activeUserConfigTab, index)}
+                                                autoFocus
+                                                className="px-3 py-1.5 border border-indigo-500 rounded-lg text-sm dark:bg-gray-800 dark:text-white outline-none ring-2 ring-indigo-500/20"
+                                            />
+                                        ) : (
+                                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{item}</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+                                            {/* Prevent editing core roles */}
+                                            {!(activeUserConfigTab === 'types' && ['Super Admin', 'Admin', 'Editor', 'Viewer'].includes(item)) && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => { setEditingIndex(index); setEditingValue(item); }}
+                                                        className="p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                                        title="Edit"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            if (activeUserConfigTab === 'types') removeUserType(index);
+                                                            else if (activeUserConfigTab === 'designations') removeDesignation(index);
+                                                            else if (activeUserConfigTab === 'departments') removeDepartment(index);
+                                                            else removeSalaryRole(index);
+                                                        }}
+                                                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
-              )}
-            </div>
 
-            <div className="flex justify-end mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-               <button onClick={handleSaveUserConfig} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20">
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  Save Configuration
-              </button>
+                <div className="flex justify-end mt-6">
+                    <button 
+                        onClick={handleSaveUserConfig} 
+                        disabled={isSaving || isLoading}
+                        className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 group/save"
+                        title="Save All Changes"
+                    >
+                        {isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
+                    </button>
+                </div>
             </div>
           </div>
         );
@@ -616,7 +670,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'global-settings':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            {/* ... Global Settings Content ... */}
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
               <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><Globe className="w-5 h-5" /></div>
               <div>
@@ -625,7 +678,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* ... Inputs ... */}
               <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">System Name</label>
                 <input name="system_name" value={settings.system_name || ''} onChange={handleInputChange} className="input-field" />
@@ -668,7 +720,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'school-settings':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-             {/* ... School Settings Content ... */}
              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><School className="w-5 h-5" /></div>
                 <div>
@@ -718,7 +769,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                </div>
             </div>
              <div className="flex justify-end mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-                 <button onClick={handleSave} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20">
+                 <button onClick={handleSave} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">
                     {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                     Save Information
                 </button>
@@ -729,7 +780,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'role-permissions':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
-            {/* ... Role Permissions Content ... */}
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
               <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><Shield className="w-5 h-5" /></div>
               <div>
@@ -738,7 +788,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               </div>
             </div>
 
-            {/* Role Tabs */}
             <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg mb-6 w-fit overflow-x-auto">
               {userConfig.userTypes.map((role) => (
                 <button 
@@ -751,11 +800,10 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               ))}
             </div>
 
-            {/* Permissions Matrix */}
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-900/30 border-b border-gray-200 dark:border-gray-700 text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold tracking-wider">
+                  <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 text-xs uppercase text-gray-500 dark:text-gray-400 font-semibold tracking-wider">
                     <th className="px-6 py-4">Module</th>
                     <th className="px-6 py-4 text-center">View</th>
                     <th className="px-6 py-4 text-center">Add / Edit</th>
@@ -811,7 +859,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'menu-layout':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            {/* ... Layout Configuration Content ... */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><LayoutTemplate className="w-5 h-5" /></div>
@@ -833,7 +880,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               </div>
             </div>
 
-            {/* Dashboard Layout Tab */}
             {activeLayoutTab === 'dashboard' && dashboardConfig && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
                 <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -855,7 +901,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               </div>
             )}
 
-            {/* Admin Panel Layout Tab */}
             {activeLayoutTab === 'admin' && adminConfig && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
                 <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
@@ -871,7 +916,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
               </div>
             )}
 
-            {/* Menu Layout Tab */}
             {activeLayoutTab === 'menu' && (
               <div className="animate-fade-in">
                 <div className="space-y-4">
@@ -880,11 +924,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
                         <input value={item.label} onChange={(e) => handleMenuChange(index, 'label', e.target.value)} placeholder="Label" className="input-field" />
                         <input value={item.href || ''} onChange={(e) => handleMenuChange(index, 'href', e.target.value)} placeholder="Href (e.g., dashboard)" className="input-field" />
-                        {renderIconPicker(
-                          item.icon || '',
-                          (iconName) => handleMenuChange(index, 'icon', iconName),
-                          `main-${index}`
-                        )}
+                        {renderIconPicker(item.icon || '', (iconName) => handleMenuChange(index, 'icon', iconName), `main-${index}`)}
                         <div className="flex gap-2 justify-end">
                           <button onClick={() => addSubMenuItem(index)} className="p-2 text-sm text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded" title="Add Submenu"><Plus className="w-4 h-4" /></button>
                           <button onClick={() => removeMenuItem(index)} className="p-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Remove Item"><Trash2 className="w-4 h-4" /></button>
@@ -896,11 +936,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                             <div key={childIndex} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
                               <input value={child.label} onChange={(e) => handleSubMenuChange(index, childIndex, 'label', e.target.value)} placeholder="Sub Label" className="input-field" />
                               <input value={child.href || ''} onChange={(e) => handleSubMenuChange(index, childIndex, 'href', e.target.value)} placeholder="Sub Href" className="input-field" />
-                              {renderIconPicker(
-                                child.icon || '',
-                                (iconName) => handleSubMenuChange(index, childIndex, 'icon', iconName),
-                                `sub-${index}-${childIndex}`
-                              )}
+                              {renderIconPicker(child.icon || '', (iconName) => handleSubMenuChange(index, childIndex, 'icon', iconName), `sub-${index}-${childIndex}`)}
                               <div className="flex justify-end">
                                 <button onClick={() => removeSubMenuItem(index, childIndex)} className="p-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Remove Sub Item"><Trash2 className="w-4 h-4" /></button>
                               </div>
@@ -916,11 +952,7 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
             )}
             
             <div className="flex justify-end mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-               <button 
-                  onClick={handleSaveLayout} 
-                  disabled={isSaving || isLoading} 
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20"
-                >
+               <button onClick={handleSaveLayout} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20">
                   {isSaving ? <Loader2 className="w-5 h-5 animate-spin"/> : <Save className="w-5 h-5"/>}
                   {`Save ${activeLayoutTab.charAt(0).toUpperCase() + activeLayoutTab.slice(1)} Layout`}
                 </button>
@@ -931,7 +963,6 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
       case 'system-student-field':
         return (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
-            {/* ... Student Fields Content ... */}
             <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700 justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg"><BookOpen className="w-5 h-5" /></div>
@@ -941,119 +972,115 @@ export const Settings: React.FC<SettingsProps> = ({ activePage }) => {
                 </div>
               </div>
               <div className="flex p-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg overflow-x-auto">
-                <button
-                  onClick={() => setActiveStudentFieldTab('classes')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'classes' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
-                >
+                <button onClick={() => { setActiveStudentFieldTab('classes'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'classes' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
                   <Layout className="w-4 h-4" /> Classes
                 </button>
-                <button
-                  onClick={() => setActiveStudentFieldTab('sections')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'sections' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
-                >
+                <button onClick={() => { setActiveStudentFieldTab('sections'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'sections' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
                   <Layers className="w-4 h-4" /> Sections
                 </button>
-                <button
-                  onClick={() => setActiveStudentFieldTab('subjects')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'subjects' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
-                >
+                <button onClick={() => { setActiveStudentFieldTab('subjects'); setEditingIndex(null); }} className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${activeStudentFieldTab === 'subjects' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>
                   <BookOpen className="w-4 h-4" /> Subjects
                 </button>
               </div>
             </div>
 
-            {/* Content Area */}
             <div className="mt-4 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 animate-fade-in">
-                {activeStudentFieldTab === 'classes' && (
-                    <>
-                        <div className="flex items-center gap-2 mb-4">
-                            <Layout className="w-5 h-5 text-indigo-500" />
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Classes</h4>
-                        </div>
-                        <div className="flex gap-2 mb-4">
-                            <input
-                                value={newClass}
-                                onChange={(e) => setNewClass(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddField('classes')}
-                                placeholder="Add new class (e.g. Class 10)..."
-                                className="input-field flex-1"
-                            />
-                            <button onClick={() => handleAddField('classes')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {studentFields.classes.map((item, index) => (
-                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
-                                    <button onClick={() => handleRemoveField('classes', index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                                </div>
-                            ))}
-                            {studentFields.classes.length === 0 && <span className="text-sm text-gray-500 italic">No classes added.</span>}
-                        </div>
-                    </>
-                )}
+                {/* Unified title area */}
+                <div className="flex items-center gap-2 mb-4">
+                    {activeStudentFieldTab === 'classes' && <Layout className="w-5 h-5 text-indigo-500" />}
+                    {activeStudentFieldTab === 'sections' && <Layers className="w-5 h-5 text-indigo-500" />}
+                    {activeStudentFieldTab === 'subjects' && <BookOpen className="w-5 h-5 text-indigo-500" />}
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200">
+                      Manage {activeStudentFieldTab.charAt(0).toUpperCase() + activeStudentFieldTab.slice(1)}
+                    </h4>
+                </div>
 
-                {activeStudentFieldTab === 'sections' && (
-                    <>
-                        <div className="flex items-center gap-2 mb-4">
-                            <Layers className="w-5 h-5 text-indigo-500" />
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Sections</h4>
-                        </div>
-                        <div className="flex gap-2 mb-4">
-                            <input
-                                value={newSection}
-                                onChange={(e) => setNewSection(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddField('sections')}
-                                placeholder="Add new section (e.g. A, B)..."
-                                className="input-field flex-1"
-                            />
-                            <button onClick={() => handleAddField('sections')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {studentFields.sections.map((item, index) => (
-                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
-                                    <button onClick={() => handleRemoveField('sections', index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                                </div>
-                            ))}
-                            {studentFields.sections.length === 0 && <span className="text-sm text-gray-500 italic">No sections added.</span>}
-                        </div>
-                    </>
-                )}
+                {/* Unified add input */}
+                <div className="flex gap-2 mb-6 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <input 
+                      value={activeStudentFieldTab === 'classes' ? newClass : activeStudentFieldTab === 'sections' ? newSection : newSubject} 
+                      onChange={(e) => {
+                        if (activeStudentFieldTab === 'classes') setNewClass(e.target.value);
+                        else if (activeStudentFieldTab === 'sections') setNewSection(e.target.value);
+                        else setNewSubject(e.target.value);
+                      }} 
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddField(activeStudentFieldTab)} 
+                      placeholder={`Add new ${activeStudentFieldTab.slice(0, -1)}...`} 
+                      className="input-field flex-1" 
+                    />
+                    <button onClick={() => handleAddField(activeStudentFieldTab)} className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-500/20">
+                      <Plus className="w-6 h-6" />
+                    </button>
+                </div>
 
-                {activeStudentFieldTab === 'subjects' && (
-                    <>
-                        <div className="flex items-center gap-2 mb-4">
-                            <BookOpen className="w-5 h-5 text-indigo-500" />
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Manage Subjects</h4>
-                        </div>
-                        <div className="flex gap-2 mb-4">
-                            <input
-                                value={newSubject}
-                                onChange={(e) => setNewSubject(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddField('subjects')}
-                                placeholder="Add new subject (e.g. Math, English)..."
-                                className="input-field flex-1"
-                            />
-                            <button onClick={() => handleAddField('subjects')} className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200"><Plus className="w-5 h-5" /></button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {studentFields.subjects.map((item, index) => (
-                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full shadow-sm">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item}</span>
-                                    <button onClick={() => handleRemoveField('subjects', index)} className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></button>
-                                </div>
+                {/* Unified table for visualization */}
+                <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-gray-100 dark:border-gray-700 text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                <th className="px-6 py-4 w-16">#</th>
+                                <th className="px-6 py-4">Name</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
+                            {studentFields[activeStudentFieldTab].map((item, index) => (
+                                <tr key={index} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 group transition-colors">
+                                    <td className="px-6 py-4 text-sm text-gray-400 font-medium">{index + 1}</td>
+                                    <td className="px-6 py-4">
+                                        {editingIndex === index ? (
+                                            <input 
+                                                value={editingValue} 
+                                                onChange={e => setEditingValue(e.target.value)}
+                                                onBlur={() => handleUpdateField(activeStudentFieldTab, index)}
+                                                onKeyDown={e => e.key === 'Enter' && handleUpdateField(activeStudentFieldTab, index)}
+                                                autoFocus
+                                                className="px-3 py-1.5 border border-indigo-500 rounded-lg text-sm dark:bg-gray-800 dark:text-white outline-none ring-2 ring-indigo-500/20"
+                                            />
+                                        ) : (
+                                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{item}</span>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+                                            <button 
+                                                onClick={() => { setEditingIndex(index); setEditingValue(item); }}
+                                                className="p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                                title="Edit"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleRemoveField(activeStudentFieldTab, index)}
+                                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
                             ))}
-                            {studentFields.subjects.length === 0 && <span className="text-sm text-gray-500 italic">No subjects added.</span>}
-                        </div>
-                    </>
-                )}
-            </div>
+                            {studentFields[activeStudentFieldTab].length === 0 && (
+                                <tr>
+                                    <td colSpan={3} className="px-6 py-12 text-center text-gray-400 italic">No items configured. Use the field above to add one.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
 
-            <div className="flex justify-end mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-               <button onClick={handleSaveFields} disabled={isSaving || isLoading} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20">
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  Save Fields
-               </button>
+                {/* Save icon moved out of table container to the bottom as requested */}
+                <div className="flex justify-end mt-6">
+                    <button 
+                        onClick={handleSaveFields} 
+                        disabled={isSaving || isLoading}
+                        className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 group/save"
+                        title="Save All Changes"
+                    >
+                        {isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <Save className="w-6 h-6" />}
+                    </button>
+                </div>
             </div>
           </div>
         );

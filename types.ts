@@ -83,14 +83,18 @@ export interface Employee { // Renamed from Teacher
   full_name: string;
   subject?: string; // Kept as subject/designation (Role)
   department?: string; // New field
+  employee_type?: 'Academic' | 'Non-Academic'; // Added
+  level?: 'Senior' | 'Junior'; // Added
+  academic_subject?: string; // Added
+  salary_role?: string; // Added
   phone?: string;
   email?: string;
   address?: string;
   dob?: string;
   gender?: string;
   blood_group?: string; // New field
+  aadhar_no?: string; // New field
   qualification?: string;
-  experience_details?: string; // New field
   total_experience?: string; // New field
   joining_date?: string;
   photo_url?: string;
@@ -105,6 +109,7 @@ export interface Employee { // Renamed from Teacher
   upi_id?: string;
   // Salary Details
   salary_amount?: number;
+  salary_frequency?: string; // Added
   custom_fields?: Record<string, any>;
 }
 

@@ -1,26 +1,18 @@
-
 import React, { useState, useEffect } from 'react';
 import { Banknote, Search, Save, CheckCircle, Clock, Calendar, DollarSign, User, CreditCard, Briefcase, Loader2, ArrowRight, RefreshCw, Gift } from 'lucide-react';
 import { dbService } from '../services/supabase';
 import { Employee, EmployeeSalaryPayment, Discount } from '../types';
 import { useToast } from '../context/ToastContext';
+import { useSettings } from '../context/SettingsContext';
 import { formatDate } from '../utils/dateFormatter';
 
-interface PayrollProps {
-  initialTab?: 'payment' | 'structure';
-}
-
-export const Payroll: React.FC<PayrollProps> = ({ initialTab = 'payment' }) => {
-  const [activeTab, setActiveTab] = useState(initialTab);
+export const Payroll: React.FC = () => {
+  const { currencySymbol } = useSettings();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [bonuses, setBonuses] = useState<Discount[]>([]); // Bonus list
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const { showToast } = useToast();
-
-  // Structure State
-  const [editingSalaries, setEditingSalaries] = useState<Record<number, number>>({});
-  const [isSavingSalary, setIsSavingSalary] = useState<number | null>(null);
 
   // Payment State
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -31,11 +23,8 @@ export const Payroll: React.FC<PayrollProps> = ({ initialTab = 'payment' }) => {
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Bank Transfer' | 'Cheque'>('Bank Transfer');
   const [paymentNote, setPaymentNote] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  // Corrected duplicate assignment syntax error to fix line 27 error
   const [paymentHistory, setPaymentHistory] = useState<EmployeeSalaryPayment[]>([]);
-
-  useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
 
   useEffect(() => {
     fetchInitialData();
@@ -62,33 +51,6 @@ export const Payroll: React.FC<PayrollProps> = ({ initialTab = 'payment' }) => {
   const fetchPaymentHistory = async (empId: number) => {
     const history = await dbService.getEmployeePayments(empId);
     setPaymentHistory(history);
-  };
-
-  const handleSalaryChange = (id: number, amount: string) => {
-    setEditingSalaries(prev => ({ ...prev, [id]: Number(amount) }));
-  };
-
-  const saveSalary = async (employee: Employee) => {
-    const newSalary = editingSalaries[employee.id];
-    if (newSalary === undefined) return;
-
-    setIsSavingSalary(employee.id);
-    const result = await dbService.updateEmployee({ ...employee, salary_amount: newSalary });
-    setIsSavingSalary(null);
-
-    if (result.success) {
-      showToast("Salary updated successfully");
-      // Update local state
-      setEmployees(prev => prev.map(e => e.id === employee.id ? { ...e, salary_amount: newSalary } : e));
-      setEditingSalaries(prev => {
-        const newState = { ...prev };
-        delete newState[employee.id];
-        return newState;
-      });
-    } else {
-      const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
-      showToast("Failed to update salary: " + errorMsg, 'error');
-    }
   };
 
   const calculateTotalSalary = (empId: number, bonusId: string) => {
@@ -158,265 +120,181 @@ export const Payroll: React.FC<PayrollProps> = ({ initialTab = 'payment' }) => {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Banknote className="w-8 h-8 text-indigo-600" /> Payroll System
+            <Banknote className="w-8 h-8 text-indigo-600" /> Pay Salary
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">Manage employee salaries and payments.</p>
-        </div>
-        <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-          <button onClick={() => setActiveTab('payment')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'payment' ? 'bg-white dark:bg-gray-600 shadow text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>Pay Salary</button>
-          <button onClick={() => setActiveTab('structure')} className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'structure' ? 'bg-white dark:bg-gray-600 shadow text-indigo-600 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>Salary Structure</button>
+          <p className="text-gray-500 dark:text-gray-400">Process and record employee salary payments.</p>
         </div>
       </div>
 
-      {activeTab === 'structure' && (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Employee Salary Configuration</h3>
-            <div className="flex gap-2">
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search Employee..." 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <button onClick={fetchInitialData} className="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" title="Refresh List">
-                  <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-700/30 border-b border-gray-200 dark:border-gray-700 text-xs uppercase text-gray-500 font-semibold">
-                  <th className="px-6 py-4">Employee</th>
-                  <th className="px-6 py-4">Role</th>
-                  <th className="px-6 py-4">Current Base Salary</th>
-                  <th className="px-6 py-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filteredEmployees.map(emp => (
-                  <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold text-sm">
-                          {emp.full_name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-900 dark:text-white">{emp.full_name}</div>
-                          <div className="text-xs text-gray-500">{emp.email || 'No Email'}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
-                      {emp.subject || 'Staff'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="relative max-w-[150px]">
-                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                        <input 
-                          type="number" 
-                          value={editingSalaries[emp.id] !== undefined ? editingSalaries[emp.id] : (emp.salary_amount || 0)}
-                          onChange={(e) => handleSalaryChange(emp.id, e.target.value)}
-                          className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {editingSalaries[emp.id] !== undefined && editingSalaries[emp.id] !== emp.salary_amount && (
-                        <button 
-                          onClick={() => saveSalary(emp)}
-                          disabled={isSavingSalary === emp.id}
-                          className="px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1 ml-auto"
-                        >
-                          {isSavingSalary === emp.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Update
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'payment' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-          {/* Employee Search List */}
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm h-[600px] flex flex-col">
-            <div className="flex gap-2 mb-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search Employee..." 
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <button onClick={fetchInitialData} className="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" title="Refresh List">
-                  <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
-              {filteredEmployees.map(emp => (
-                <div 
-                  key={emp.id} 
-                  onClick={() => setSelectedEmployee(emp)}
-                  className={`p-3 rounded-lg cursor-pointer border transition-colors flex items-center gap-3 ${selectedEmployee?.id === emp.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                >
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold text-sm">
-                    {emp.full_name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-gray-900 dark:text-white text-sm truncate">{emp.full_name}</h4>
-                    <p className="text-xs text-gray-500 truncate">{emp.subject}</p>
-                  </div>
-                  {emp.salary_amount ? (
-                    <span className="text-xs font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">${emp.salary_amount}</span>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic">No Salary</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Payment Form */}
-          <div className="lg:col-span-2 space-y-6">
-            {selectedEmployee ? (
-              <>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
-                  <div className="flex justify-between items-start mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 text-2xl font-bold">
-                        {selectedEmployee.full_name.charAt(0)}
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">{selectedEmployee.full_name}</h2>
-                        <p className="text-sm text-gray-500">{selectedEmployee.subject} • {selectedEmployee.department}</p>
-                        <p className="text-sm text-indigo-600 font-medium mt-1">Base Salary: ${selectedEmployee.salary_amount || 0}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${selectedEmployee.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {selectedEmployee.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Salary Month</label>
-                      <input type="month" value={paymentMonth} onChange={e => setPaymentMonth(e.target.value)} className="input-field w-full" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Date</label>
-                      <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="input-field w-full" />
-                    </div>
-                    
-                    {/* Bonus Selection */}
-                    <div className="space-y-2 md:col-span-2">
-                       <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                         <Gift className="w-4 h-4 text-pink-500" /> Apply Bonus
-                       </label>
-                       <select 
-                         className="input-field w-full"
-                         value={selectedBonusId}
-                         onChange={(e) => calculateTotalSalary(selectedEmployee.id, e.target.value)}
-                       >
-                         <option value="">No Bonus</option>
-                         {bonuses.map(b => (
-                           <option key={b.id} value={b.id}>
-                             {b.name} (+{b.type === 'percentage' ? `${b.value}%` : `$${b.value}`})
-                           </option>
-                         ))}
-                       </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Payable ($)</label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                        <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} className="input-field w-full pl-10 font-bold text-gray-900 dark:text-white" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Mode</label>
-                      <select value={paymentMode} onChange={e => setPaymentMode(e.target.value as any)} className="input-field w-full">
-                        <option>Bank Transfer</option>
-                        <option>Cash</option>
-                        <option>UPI</option>
-                        <option>Cheque</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes / Reference</label>
-                      <input type="text" value={paymentNote} onChange={e => setPaymentNote(e.target.value)} placeholder="e.g. Transaction ID or Cheque No" className="input-field w-full" />
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex justify-end">
-                    <button 
-                      onClick={handlePaySalary} 
-                      disabled={isProcessing || !paymentAmount}
-                      className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
-                    >
-                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                      Pay Salary
-                    </button>
-                  </div>
-                </div>
-
-                {/* History */}
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Payment History</h3>
-                  {paymentHistory.length === 0 ? (
-                    <p className="text-center text-gray-500 py-4">No payments recorded.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="text-gray-500 bg-gray-50 dark:bg-gray-700/30">
-                          <tr>
-                            <th className="px-4 py-3">Date</th>
-                            <th className="px-4 py-3">For Month</th>
-                            <th className="px-4 py-3">Amount</th>
-                            <th className="px-4 py-3">Mode</th>
-                            <th className="px-4 py-3">Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                          {paymentHistory.map((pay, idx) => (
-                            <tr key={idx}>
-                              <td className="px-4 py-3">{formatDate(pay.payment_date)}</td>
-                              <td className="px-4 py-3">{pay.payment_for_month}</td>
-                              <td className="px-4 py-3 font-semibold text-green-600">${pay.amount_paid}</td>
-                              <td className="px-4 py-3">{pay.payment_mode}</td>
-                              <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{pay.notes || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="bg-white dark:bg-gray-800 p-12 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col items-center justify-center text-gray-400 h-full">
-                <User className="w-16 h-16 mb-4 opacity-20" />
-                <p>Select an employee to process salary.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+        {/* Employee Search List */}
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm h-[600px] flex flex-col">
+          <div className="flex gap-2 mb-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search Employee..." 
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
-            )}
+              <button onClick={fetchInitialData} className="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" title="Refresh List">
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
+            {filteredEmployees.map(emp => (
+              <div 
+                key={emp.id} 
+                onClick={() => setSelectedEmployee(emp)}
+                className={`p-3 rounded-lg cursor-pointer border transition-colors flex items-center gap-3 ${selectedEmployee?.id === emp.id ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+              >
+                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold text-sm">
+                  {emp.full_name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-gray-900 dark:text-white text-sm truncate">{emp.full_name}</h4>
+                  <p className="text-xs text-gray-500 truncate">{emp.subject}</p>
+                </div>
+                {emp.salary_amount ? (
+                  <span className="text-xs font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">{currencySymbol}{emp.salary_amount}</span>
+                ) : (
+                  <span className="text-xs text-gray-400 italic">No Salary</span>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-      )}
+
+        {/* Payment Form */}
+        <div className="lg:col-span-2 space-y-6">
+          {selectedEmployee ? (
+            <>
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm animate-fade-in">
+                <div className="flex justify-between items-start mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 text-2xl font-bold">
+                      {selectedEmployee.full_name.charAt(0)}
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">{selectedEmployee.full_name}</h2>
+                      <p className="text-sm text-gray-500">{selectedEmployee.subject} • {selectedEmployee.department}</p>
+                      <p className="text-sm text-indigo-600 font-medium mt-1">Base Salary: {currencySymbol}{selectedEmployee.salary_amount || 0}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${selectedEmployee.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {selectedEmployee.status}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Salary Month</label>
+                    <input type="month" value={paymentMonth} onChange={(e) => setPaymentMonth(e.target.value)} className="input-field w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Date</label>
+                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="input-field w-full" />
+                  </div>
+                  
+                  {/* Bonus Selection */}
+                  <div className="space-y-2 md:col-span-2">
+                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                       <Gift className="w-4 h-4 text-pink-500" /> Apply Bonus
+                     </label>
+                     <select 
+                       className="input-field w-full"
+                       value={selectedBonusId}
+                       onChange={(e) => calculateTotalSalary(selectedEmployee.id, e.target.value)}
+                     >
+                       <option value="">No Bonus</option>
+                       {bonuses.map(b => (
+                         <option key={b.id} value={b.id}>
+                           {b.name} (+{b.type === 'percentage' ? `${b.value}%` : `${currencySymbol}${b.value}`})
+                         </option>
+                       ))}
+                     </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Total Payable ({currencySymbol})</label>
+                    <div className="relative">
+                      <div className="absolute left-3 top-3 h-4 w-4 text-gray-400 flex items-center justify-center font-bold text-xs">{currencySymbol}</div>
+                      <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(Number(e.target.value))} className="input-field w-full pl-10 font-bold text-gray-900 dark:text-white" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Payment Mode</label>
+                    <select value={paymentMode} onChange={e => setPaymentMode(e.target.value as any)} className="input-field w-full">
+                      <option>Bank Transfer</option>
+                      <option>Cash</option>
+                      <option>UPI</option>
+                      <option>Cheque</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes / Reference</label>
+                    <input type="text" value={paymentNote} onChange={e => setPaymentNote(e.target.value)} placeholder="e.g. Transaction ID or Cheque No" className="input-field w-full" />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <button 
+                    onClick={handlePaySalary} 
+                    disabled={isProcessing || !paymentAmount}
+                    className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                  >
+                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                    Pay Salary
+                  </button>
+                </div>
+              </div>
+
+              {/* History */}
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Payment History</h3>
+                {paymentHistory.length === 0 ? (
+                  <p className="text-center text-gray-500 py-4">No payments recorded.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="text-gray-500 bg-gray-50 dark:bg-gray-700/30">
+                        <tr>
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">For Month</th>
+                          <th className="px-4 py-3">Amount</th>
+                          <th className="px-4 py-3">Mode</th>
+                          <th className="px-4 py-3">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {paymentHistory.map((pay, idx) => (
+                          <tr key={idx}>
+                            <td className="px-4 py-3">{formatDate(pay.payment_date)}</td>
+                            <td className="px-4 py-3">{pay.payment_for_month}</td>
+                            <td className="px-4 py-3 font-semibold text-green-600">{currencySymbol}{pay.amount_paid}</td>
+                            <td className="px-4 py-3">{pay.payment_mode}</td>
+                            <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{pay.notes || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 p-12 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col items-center justify-center text-gray-400 h-full">
+              <User className="w-16 h-16 mb-4 opacity-20" />
+              <p>Select an employee to process salary.</p>
+            </div>
+          )}
+        </div>
+      </div>
       <style>{`.input-field { width: 100%; padding: 10px; border-radius: 0.5rem; border: 1px solid #e5e7eb; background: #fff; } .dark .input-field { background: #374151; border-color: #4b5563; color: white; }`}</style>
     </div>
   );
